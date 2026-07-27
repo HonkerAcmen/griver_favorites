@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="ChangeListManager">
     <list default="true" id="8324ab06-a6c7-476b-9228-9802d32ea5ee" name="更改" comment="">
       <change afterPath="$PROJECT_DIR$/.idea/griver_favorites.iml" afterDir="false" />
@@ -25,25 +28,42 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 7
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 7
+}</component>
   <component name="ProjectId" id="3H4rMHRgpM6s5rLqqNj5YyRojQb" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "master",
-    "settings.editor.selected.configurable": "editor.preferences.inline.completion"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python 测试.test_main.test_create_user_success 的 Python 测试.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
   }
-}]]></component>
-  <component name="RunManager">
+}</component>
+  <component name="RunManager" selected="Python 测试.test_main.test_create_user_success 的 Python 测试">
+    <configuration name="test_main.test_create_user_success 的 Python 测试" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="griver_favorites" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="RUN_TOOL" value="" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;test_main.test_create_user_success&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
     <configuration name="test_main.test_health_check 的 Python 测试" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
       <module name="griver_favorites" />
       <option name="ENV_FILES" value="" />
@@ -62,6 +82,7 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python 测试.test_main.test_create_user_success 的 Python 测试" />
         <item itemvalue="Python 测试.test_main.test_health_check 的 Python 测试" />
       </list>
     </recent_temporary>
@@ -81,6 +102,19 @@
       <option name="presentableId" value="Default" />
       <updated>1785138132359</updated>
     </task>
+    <task id="LOCAL-00001" summary="feat: submit ignore file">
+      <option name="closed" value="true" />
+      <created>1785139036444</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1785139036444</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="feat: submit ignore file" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: submit ignore file" />
   </component>
 </project>
