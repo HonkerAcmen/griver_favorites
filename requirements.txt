@@ -18,3 +18,6 @@ pydantic-settings>=2.6.0,<3
 
 python-dotenv
 pydantic
+
+asyncpg>=0.29.0,<0.32
+greenlet>=3.0.0,<4

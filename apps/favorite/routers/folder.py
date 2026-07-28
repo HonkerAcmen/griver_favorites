@@ -15,5 +15,5 @@ async def create_folder(
         payload: FavoriteFolderCreateInSchema,
         service: FolderService = Depends(get_folder_service)
 ):
-        folder = service.create_folder(payload.user_id, payload.name)
+        folder = await service.create_folder(payload.user_id, payload.name)
         return success(data=folder)
