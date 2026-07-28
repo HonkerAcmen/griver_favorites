@@ -16,9 +16,10 @@ def test_create_folder():
         created_at = datetime.datetime(2026, 7, 28, 12, 0, 0, tzinfo=datetime.UTC)
 
         mock_service.create_folder.return_value = {
-                "folder_id": folder_id,
+                "id": folder_id,
                 "name": "好运来",
-                "created_at": created_at.isoformat()
+                "created_at": created_at.isoformat(),
+                "updated_at": created_at.isoformat(),
         }
 
         app.dependency_overrides[get_folder_service] = lambda: mock_service
@@ -31,11 +32,12 @@ def test_create_folder():
         assert response.status_code == 201
         assert response.json() == {
                 "code": 0,
-                "msg": "create successful",
+                "msg": "success",
                 "data": {
-                        "folder_id": folder_id,
+                        "id": folder_id,
                         "name": "好运来",
-                        "created_at": created_at.isoformat()
+                        "created_at": created_at.isoformat(),
+                        "updated_at": created_at.isoformat(),
                 }
         }
 

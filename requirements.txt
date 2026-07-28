@@ -17,3 +17,4 @@ pydantic-settings>=2.6.0,<3
 # aio-pika>=9.5.0,<10
 
 python-dotenv
+pydantic

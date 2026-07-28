@@ -4,7 +4,10 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from apps.core.exception_handlers import register_exception_handlers
+
 app = FastAPI()
+register_exception_handlers(app)
 
 
 def register_router(application: FastAPI):
