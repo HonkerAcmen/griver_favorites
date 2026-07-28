@@ -5,7 +5,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import func
 
 revision = "001_favorite_folder"
-down_revision = "000_create_users"
+down_revision = "000_create_user"
 branch_labels = None
 depends_on = None
 
