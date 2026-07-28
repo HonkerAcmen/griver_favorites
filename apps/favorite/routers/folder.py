@@ -1,11 +1,22 @@
-from fastapi import APIRouter
+
+from fastapi import APIRouter, status
+from fastapi.params import Depends
+
+from apps.favorite.dependencies import get_folder_service
+from apps.favorite.schemas.folder import FavoriteFolderCreateInSchema
+from apps.favorite.services.folder import FolderService
 
 router = APIRouter(prefix="/folders", tags=["favorite_folder"])
 
-@router.get("")
-async  def list_folders():
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def create_folder(
+        payload: FavoriteFolderCreateInSchema,
+        service: FolderService = Depends(get_folder_service)
+):
+        folder = service.create_folder(payload.user_id, payload.name)
         return {
                 "code": 0,
-                "msg": "success",
-                "data": None
+                "msg": "create successful",
+                "data": folder
         }
