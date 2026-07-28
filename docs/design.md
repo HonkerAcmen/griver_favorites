@@ -559,14 +559,15 @@ Depends(get_db_session)          # 注意：不加括号
 
 | 脚本 | 说明 |
 |------|------|
-| `scripts/db/001_favorite_schema.sql` | 表结构参考 |
-| `scripts/db/002_favorite_seed.sql` | 用户、folder、item seed |
-| `scripts/db/003_intelligence_seed.sql` | **待新增**：情报测试数据 |
+| `scripts/db/001_favorite_schema.sql` | 表结构参考（含 intelligence、folder 级 item 唯一索引） |
+| `scripts/db/002_users_seed.sql` | 5 个测试用户 |
+| `scripts/db/003_intelligence_seed.sql` | 情报测试数据（80 条，含 5 条已软删） |
+| `scripts/db/004_favorite_seed.sql` | 15 folder + 105 item |
 
 要求：
 
 - 使用固定 UUID 段，执行前 DELETE 同段数据，保证**可重复执行**
-- seed 顺序：users → intelligence → folders → items
+- 执行顺序：`002` → `003` → `004`（需先 `alembic upgrade head`）
 
 ---
 

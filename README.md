@@ -33,7 +33,9 @@ griver_favorites/
 │       └── 001_favorite_folder.py
 ├── scripts/db/             # 参考 SQL（schema 快照、种子数据）
 │   ├── 001_favorite_schema.sql
-│   └── 002_favorite_seed.sql
+│   ├── 002_users_seed.sql
+│   ├── 003_intelligence_seed.sql
+│   └── 004_favorite_seed.sql
 ├── docs/                   # 设计与 API 文档
 ├── requirements.txt
 └── requirements-dev.txt
@@ -140,11 +142,16 @@ alembic revision -m "描述"    # 新建空 migration
 
 ### 种子数据（可选）
 
-`scripts/db/002_favorite_seed.sql` 提供约 120 条测试数据（15 个收藏夹 + 105 条收藏项）。执行前需先在 `users` 表中插入对应测试用户（脚本内 §0 有示例 SQL）。
+按顺序执行 seed（可重复运行）：
 
 ```bash
-psql -h localhost -U postgres -d griver_favorites -f scripts/db/002_favorite_seed.sql
+# 需先 alembic upgrade head；将连接串换成你的 DATABASE_URL_SYNC
+psql "$DATABASE_URL_SYNC" -f scripts/db/002_users_seed.sql
+psql "$DATABASE_URL_SYNC" -f scripts/db/003_intelligence_seed.sql
+psql "$DATABASE_URL_SYNC" -f scripts/db/004_favorite_seed.sql
 ```
+
+数据量：5 用户、80 情报、15 收藏夹、105 收藏项。`target_type` 均为 `intelligence`；同一情报可出现在不同收藏夹。
 
 ## 本期功能范围
 
