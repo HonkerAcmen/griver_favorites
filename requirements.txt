@@ -22,3 +22,4 @@ pydantic
 asyncpg>=0.29.0,<0.32
 greenlet>=3.0.0,<4
 pytest-asyncio
+pytest
