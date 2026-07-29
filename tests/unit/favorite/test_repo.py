@@ -8,6 +8,7 @@ from apps.core.database import SessionLocal
 from apps.favorite.repositories.folder import (
     favorite_create_folder,
     favorite_folder_find_by_id_and_user,
+    favorite_folder_count_by_name,
 )
 
 
@@ -42,9 +43,24 @@ async def test_favorite_folder_find_by_id_and_user_returns_folder(
     folder = await favorite_create_folder(session, user_id, folder_name)
     folder_id = folder.id
 
-    result = await favorite_folder_find_by_id_and_user(session, user_id, str(folder_id))
+    result = await favorite_folder_find_by_id_and_user(session, folder_id, user_id)
     assert result.id is not None
     assert result.name == folder_name
     assert result.user_id == user_id
     assert result.id == folder_id
     assert result.is_deleted is False
+
+
+@pytest.mark.asyncio
+async def test_favorite_folder_count_by_name_returns_counts(session: AsyncSession):
+    user_id = SEED_ALICE_ID
+    folder_name = "TDD测试收藏夹个数"
+
+    await favorite_create_folder(session, user_id, folder_name)
+
+    result = await favorite_folder_count_by_name(session, user_id, folder_name)
+
+    assert result == 1
+
+    result = await favorite_folder_count_by_name(session, user_id, "TDD收藏夹个数2")
+    assert result == 0
