@@ -1,5 +1,6 @@
 import uuid
 
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,5 +48,54 @@ async def favorite_folder_count_by_name(
 
 async def favorite_folder_list_by_user(
     session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int, keyword: str
-):
-    pass
+) -> tuple[list[GriverFavoriteFolder], int] | None:
+    new_key_word = keyword.strip()
+
+    if len(new_key_word) > 0:
+        escaped_str = new_key_word.translate(
+            str.maketrans({"%": r"\%", "_": r"\_", "\\": r"\\"})
+        )
+        search_str = f"%{escaped_str}%"
+
+        res = await session.execute(
+            select(GriverFavoriteFolder)
+            .where(
+                GriverFavoriteFolder.user_id == user_id,
+                GriverFavoriteFolder.name.ilike(search_str, escape="\\"),
+                GriverFavoriteFolder.is_deleted.is_(False),
+            )
+            .order_by(GriverFavoriteFolder.updated_at.desc())
+            .offset(offset=(max(1, page) - 1) * page_size)
+            .limit(page_size)
+        )
+        total = await session.scalar(
+            select(func.count()).where(
+                GriverFavoriteFolder.user_id == user_id,
+                GriverFavoriteFolder.name.ilike(search_str, escape="\\"),
+                GriverFavoriteFolder.is_deleted.is_(False),
+            )
+        )
+
+        items: list[GriverFavoriteFolder] = list(res.scalars().all())
+        return items, total
+
+    else:
+        res = await session.execute(
+            select(GriverFavoriteFolder)
+            .where(
+                GriverFavoriteFolder.user_id == user_id,
+                GriverFavoriteFolder.is_deleted.is_(False),
+            )
+            .order_by(GriverFavoriteFolder.updated_at.desc())
+            .offset(offset=(max(1, page) - 1) * page_size)
+            .limit(page_size)
+        )
+        total = await session.scalar(
+            select(func.count()).where(
+                GriverFavoriteFolder.user_id == user_id,
+                GriverFavoriteFolder.is_deleted.is_(False),
+            )
+        )
+
+        items: list[GriverFavoriteFolder] = list(res.scalars().all())
+        return items, total

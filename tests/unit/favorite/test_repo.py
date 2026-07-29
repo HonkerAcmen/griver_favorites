@@ -5,10 +5,12 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.core.database import SessionLocal
+from apps.favorite.models import GriverFavoriteFolder
 from apps.favorite.repositories.folder import (
     favorite_create_folder,
     favorite_folder_find_by_id_and_user,
     favorite_folder_count_by_name,
+    favorite_folder_list_by_user,
 )
 
 
@@ -64,3 +66,26 @@ async def test_favorite_folder_count_by_name_returns_counts(session: AsyncSessio
 
     result = await favorite_folder_count_by_name(session, user_id, "TDD收藏夹个数2")
     assert result == 0
+
+
+@pytest.mark.asyncio
+async def test_favorite_folder_list_by_user_returns_tuple(session: AsyncSession):
+    user_id = SEED_ALICE_ID
+    page = 1
+    page_size = 10
+    keyword = "情报"
+
+    items, total = await favorite_folder_list_by_user(
+        session, user_id, page, page_size, keyword
+    )
+
+    assert isinstance(items, list)
+    assert isinstance(total, int)
+    assert len(items) >= 1
+    assert total >= 1
+
+    assert all(isinstance(f, GriverFavoriteFolder) for f in items)
+
+    assert items[0].name == "重点情报"  # 测试数据中有
+    assert items[0].user_id == user_id
+    assert items[0].is_deleted is False
