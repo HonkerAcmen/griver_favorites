@@ -20,12 +20,9 @@ def register_router(application: FastAPI):
             application.include_router(router)
 
 
-
-
 @app.get("/health")
-async  def health():
-    return {
-        "status": "ok"
-    }
+async def health():
+    return {"status": "ok"}
+
 
 register_router(app)

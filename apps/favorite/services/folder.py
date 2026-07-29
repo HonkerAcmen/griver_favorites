@@ -1,7 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from apps.favorite.exceptions import FavoriteFolderNameInvalidException
 
-
 # async def create_folder(user_id, name: str) -> dict:
 #     cleaned = name.strip()
 #     if not cleaned or len(cleaned) > 100:
@@ -23,7 +22,5 @@ class FolderService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-
     async def create_folder(self, user_id, name):
         pass
-

@@ -9,36 +9,42 @@ from main import app
 
 client = TestClient(app)
 
+
 def test_create_folder():
-        mock_service = AsyncMock()
-        folder_id = "bc047d8d-05f4-4712-90b6-b5010d534ca7"
-        user_id = "bc047d8d-05f4-4712-90b6-b5010d534cab"
-        created_at = datetime.datetime(2026, 7, 28, 12, 0, 0, tzinfo=datetime.UTC)
+    mock_service = AsyncMock()
+    folder_id = "bc047d8d-05f4-4712-90b6-b5010d534ca7"
+    user_id = "bc047d8d-05f4-4712-90b6-b5010d534cab"
+    created_at = datetime.datetime(2026, 7, 28, 12, 0, 0, tzinfo=datetime.UTC)
 
-        mock_service.create_folder = AsyncMock(return_value = {
-                "id": folder_id,
-                "name": "好运来",
-                "created_at": created_at.isoformat(),
-                "updated_at": created_at.isoformat(),
-        })
-
-        app.dependency_overrides[get_folder_service] = lambda: mock_service
-
-        response = client.post("/grapi/v1/favorite/folders", json={
-                "user_id": user_id,
-                "name": "好运来",
-        })
-
-        assert response.status_code == 201
-        assert response.json() == {
-                "code": 0,
-                "msg": "success",
-                "data": {
-                        "id": folder_id,
-                        "name": "好运来",
-                        "created_at": created_at.isoformat(),
-                        "updated_at": created_at.isoformat(),
-                }
+    mock_service.create_folder = AsyncMock(
+        return_value={
+            "id": folder_id,
+            "name": "好运来",
+            "created_at": created_at.isoformat(),
+            "updated_at": created_at.isoformat(),
         }
+    )
 
-        app.dependency_overrides.clear()
+    app.dependency_overrides[get_folder_service] = lambda: mock_service
+
+    response = client.post(
+        "/grapi/v1/favorite/folders",
+        json={
+            "user_id": user_id,
+            "name": "好运来",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "code": 0,
+        "msg": "success",
+        "data": {
+            "id": folder_id,
+            "name": "好运来",
+            "created_at": created_at.isoformat(),
+            "updated_at": created_at.isoformat(),
+        },
+    }
+
+    app.dependency_overrides.clear()

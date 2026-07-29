@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+
 class FavoriteFolderCreateInSchema(BaseModel):
-        user_id: str
-        name: str
+    user_id: str
+    name: str
