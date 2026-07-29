@@ -1,5 +1,5 @@
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import func
 
@@ -39,13 +39,13 @@ def upgrade() -> None:
     )
 
     op.execute("""
-                        CREATE UNIQUE INDEX IF NOT EXISTS uq_griver_favorite_folder_user_name_active
+                        CREATE UNIQUE INDEX uq_griver_favorite_folder_user_name_active
                                 ON griver_favorite_folder (user_id, name)
                                 WHERE is_deleted = false;
                 """)
 
     op.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_griver_favorite_folder_user_list
+                        CREATE INDEX idx_griver_favorite_folder_user_list
                                 ON griver_favorite_folder (user_id, is_deleted, updated_at DESC);
 
                 """)
@@ -76,14 +76,14 @@ def upgrade() -> None:
     )
 
     op.execute("""
-                        CREATE UNIQUE INDEX IF NOT EXISTS uq_griver_favorite_item_user_target_active
+                        CREATE UNIQUE INDEX uq_griver_favorite_item_user_target_active
                             ON griver_favorite_item (user_id, target_type, target_id)
                             WHERE is_deleted = false;
 
                 """)
 
     op.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_griver_favorite_item_folder
+                        CREATE INDEX idx_griver_favorite_item_folder
                                 ON griver_favorite_item (folder_id, is_deleted);
                 """)
 
