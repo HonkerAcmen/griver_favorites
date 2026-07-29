@@ -5,13 +5,14 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.core.database import SessionLocal, engine
-from apps.favorite.models import GriverFavoriteFolder
+from apps.favorite.models import GriverFavoriteFolder, Intelligence
 from apps.favorite.repositories.folder import (
     favorite_create_folder,
     favorite_folder_find_by_id_and_user,
     favorite_folder_count_by_name,
     favorite_folder_list_by_user,
 )
+from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
 
 
 @pytest_asyncio.fixture
@@ -27,6 +28,8 @@ async def session():
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
 SEED_BOB_ID = uuid.UUID("fa500001-0002-4000-8000-000000000002")
 SEED_ALICE_FOLDER_ID = uuid.UUID("fa500001-0001-4000-8000-000000000101")
+SEED_INTELLIGENCE_ID = uuid.UUID("fa700001-0001-4000-8000-000000000001")
+SEED_INTELLIGENCE_DELETED_ID = uuid.UUID("fa700001-0001-4000-8000-000000000099")
 
 
 @pytest.mark.asyncio
@@ -147,12 +150,30 @@ async def test_favorite_folder_list_by_user_keyword_percent_is_literal(
 
     await favorite_create_folder(session, user_id, folder_name)
 
-    items, total = await favorite_folder_list_by_user(
-        session, user_id, 1, 10, "%"
-    )
+    items, total = await favorite_folder_list_by_user(session, user_id, 1, 10, "%")
     assert total == 1
     assert len(items) == 1
     assert items[0].name == folder_name
 
     _, all_total = await favorite_folder_list_by_user(session, user_id, 1, 10, "")
     assert all_total > total
+
+
+@pytest.mark.asyncio
+async def test_intelligence_find_by_id_not_deleted_returns_bool_or_none(
+    session: AsyncSession,
+):
+    intelligence_id = SEED_INTELLIGENCE_ID
+    res: Intelligence = await intelligence_find_by_id_not_deleted(
+        session, intelligence_id
+    )
+
+    assert isinstance(res, Intelligence)
+
+    res: Intelligence = await intelligence_find_by_id_not_deleted(session, uuid.uuid4())
+    assert res is None
+
+    result = await intelligence_find_by_id_not_deleted(
+        session, SEED_INTELLIGENCE_DELETED_ID
+    )
+    assert result is None
