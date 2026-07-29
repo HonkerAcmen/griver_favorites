@@ -1,50 +1,39 @@
-import datetime
 import uuid
-from unittest.mock import MagicMock, AsyncMock
 
-from starlette.testclient import TestClient
+import pytest
+from httpx import AsyncClient, ASGITransport
 
-from apps.favorite.dependencies import get_folder_service
 from main import app
 
-client = TestClient(app)
+SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
 
 
-def test_create_folder():
-    mock_service = AsyncMock()
-    folder_id = "bc047d8d-05f4-4712-90b6-b5010d534ca7"
-    user_id = "bc047d8d-05f4-4712-90b6-b5010d534cab"
-    created_at = datetime.datetime(2026, 7, 28, 12, 0, 0, tzinfo=datetime.UTC)
+@pytest.mark.asyncio
+async def test_create_folder():
+    user_id = SEED_ALICE_ID
+    folder_name = str(uuid.uuid4()) + "-router-test"
 
-    mock_service.create_folder = AsyncMock(
-        return_value={
-            "id": folder_id,
-            "name": "好运来",
-            "created_at": created_at.isoformat(),
-            "updated_at": created_at.isoformat(),
-        }
-    )
-
-    app.dependency_overrides[get_folder_service] = lambda: mock_service
-
-    response = client.post(
-        "/grapi/v1/favorite/folders",
-        json={
-            "user_id": user_id,
-            "name": "好运来",
-        },
-    )
+    # 使用 AsyncClient 配合 ASGITransport 访问本地 FastAPI 应用
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.post(
+            "/grapi/v1/favorite/folders",
+            json={
+                "user_id": str(user_id),
+                "name": folder_name,
+            },
+        )
 
     assert response.status_code == 201
-    assert response.json() == {
-        "code": 0,
-        "msg": "success",
-        "data": {
-            "id": folder_id,
-            "name": "好运来",
-            "created_at": created_at.isoformat(),
-            "updated_at": created_at.isoformat(),
-        },
-    }
 
-    app.dependency_overrides.clear()
+    res_data = response.json()
+    assert res_data["code"] == 0
+    assert res_data["msg"] == "success"
+
+    folder_data = res_data["data"]
+    assert folder_data["name"] == folder_name
+    assert folder_data["user_id"] == str(user_id)
+
+    assert "created_at" in folder_data
+    assert "updated_at" in folder_data

@@ -25,6 +25,8 @@ class FolderService:
                 self.session, user_id, folder_name=name
             )
             await self.session.flush()
+            await self.session.commit()
+
             return {
                 "name": folder.name,
                 "user_id": folder.user_id,
