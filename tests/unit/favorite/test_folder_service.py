@@ -9,6 +9,8 @@ from apps.favorite.exceptions import (
     FavoriteFolderNameInvalidException,
     FavoriteFolderNameDuplicateException,
 )
+from apps.favorite.models import GriverFavoriteFolder
+from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
 from apps.favorite.services.folder import FolderService
 
 
@@ -62,3 +64,18 @@ async def test_create_folder_duplicate_name_raises(session: AsyncSession):
 
     with pytest.raises(FavoriteFolderNameDuplicateException):
         await server.create_folder(user_id=user_id, name=folder_name)
+
+
+@pytest.mark.asyncio
+async def test_list_favorite_folders(session: AsyncSession):
+    service = FolderService(session=session)
+    params = FavoriteFolderListQueryParams(
+        user_id=SEED_ALICE_ID, page=1, page_size=10, keyword=" "
+    )
+
+    result = await service.list_favorite_folders(params)
+
+    assert all(isinstance(i, GriverFavoriteFolder) for i in result["items"])
+    assert "total" in result
+    assert result["page"] == params.page
+    assert result["page_size"] == params.page_size

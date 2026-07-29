@@ -8,7 +8,11 @@ from apps.favorite.exceptions import (
     FavoriteFolderNameInvalidException,
     FavoriteFolderNameDuplicateException,
 )
-from apps.favorite.repositories.folder import favorite_create_folder
+from apps.favorite.repositories.folder import (
+    favorite_create_folder,
+    favorite_folder_list_by_user,
+)
+from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
 
 
 class FolderService:
@@ -36,3 +40,21 @@ class FolderService:
         except IntegrityError as e:
             await self.session.rollback()
             raise FavoriteFolderNameDuplicateException() from e
+
+    async def list_favorite_folders(
+        self, params: FavoriteFolderListQueryParams
+    ) -> dict:
+        items, total = await favorite_folder_list_by_user(
+            session=self.session,
+            user_id=params.user_id,
+            page=params.page,
+            page_size=params.page_size,
+            keyword=params.keyword,
+        )
+
+        return {
+            "items": items,
+            "total": total,
+            "page": params.page,
+            "page_size": params.page_size,
+        }
