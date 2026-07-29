@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.core.database import SessionLocal
+from apps.core.database import SessionLocal, engine
 from apps.favorite.models import GriverFavoriteFolder
 from apps.favorite.repositories.folder import (
     favorite_create_folder,
@@ -17,11 +17,16 @@ from apps.favorite.repositories.folder import (
 @pytest_asyncio.fixture
 async def session():
     async with SessionLocal() as s:
-        yield s
-        await s.rollback()
+        try:
+            yield s
+        finally:
+            await s.rollback()
+    await engine.dispose()
 
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
+SEED_BOB_ID = uuid.UUID("fa500001-0002-4000-8000-000000000002")
+SEED_ALICE_FOLDER_ID = uuid.UUID("fa500001-0001-4000-8000-000000000101")
 
 
 @pytest.mark.asyncio
@@ -54,9 +59,24 @@ async def test_favorite_folder_find_by_id_and_user_returns_folder(
 
 
 @pytest.mark.asyncio
+async def test_favorite_folder_find_by_id_and_user_returns_none(session: AsyncSession):
+    user_id = SEED_ALICE_ID
+
+    result = await favorite_folder_find_by_id_and_user(session, uuid.uuid4(), user_id)
+    assert result is None
+
+    result = await favorite_folder_find_by_id_and_user(
+        session, SEED_ALICE_FOLDER_ID, SEED_BOB_ID
+    )
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_favorite_folder_count_by_name_returns_counts(session: AsyncSession):
     user_id = SEED_ALICE_ID
     folder_name = "TDD测试收藏夹个数"
+
+    assert await favorite_folder_count_by_name(session, user_id, folder_name) == 0
 
     await favorite_create_folder(session, user_id, folder_name)
 
@@ -81,11 +101,58 @@ async def test_favorite_folder_list_by_user_returns_tuple(session: AsyncSession)
 
     assert isinstance(items, list)
     assert isinstance(total, int)
-    assert len(items) >= 1
-    assert total >= 1
+    assert total == 1
+    assert len(items) == 1
 
     assert all(isinstance(f, GriverFavoriteFolder) for f in items)
 
-    assert items[0].name == "重点情报"  # 测试数据中有
+    assert items[0].name == "重点情报"
     assert items[0].user_id == user_id
     assert items[0].is_deleted is False
+
+
+@pytest.mark.asyncio
+async def test_favorite_folder_list_by_user_without_keyword(session: AsyncSession):
+    user_id = SEED_ALICE_ID
+
+    items, total = await favorite_folder_list_by_user(session, user_id, 1, 10, "")
+    assert total == 3
+    assert len(items) == 3
+
+    items_ws, total_ws = await favorite_folder_list_by_user(
+        session, user_id, 1, 10, "   "
+    )
+    assert total_ws == 3
+    assert len(items_ws) == 3
+
+
+@pytest.mark.asyncio
+async def test_favorite_folder_list_by_user_orders_by_updated_at_desc(
+    session: AsyncSession,
+):
+    user_id = SEED_ALICE_ID
+
+    items, _ = await favorite_folder_list_by_user(session, user_id, 1, 10, "")
+
+    updated_at_list = [folder.updated_at for folder in items]
+    assert updated_at_list == sorted(updated_at_list, reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_favorite_folder_list_by_user_keyword_percent_is_literal(
+    session: AsyncSession,
+):
+    user_id = SEED_ALICE_ID
+    folder_name = f"TDD-{uuid.uuid4()}-100%-off"
+
+    await favorite_create_folder(session, user_id, folder_name)
+
+    items, total = await favorite_folder_list_by_user(
+        session, user_id, 1, 10, "%"
+    )
+    assert total == 1
+    assert len(items) == 1
+    assert items[0].name == folder_name
+
+    _, all_total = await favorite_folder_list_by_user(session, user_id, 1, 10, "")
+    assert all_total > total
