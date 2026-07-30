@@ -3,7 +3,10 @@ import uuid
 import pytest
 from httpx import AsyncClient, ASGITransport
 
-from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
+from apps.favorite.schemas.folder import (
+    FavoriteFolderListQueryParams,
+    FavoriteFolderUpdateInSchema,
+)
 from main import app
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
@@ -91,7 +94,8 @@ async def test_service_get_favorite_folder_detail():
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         response = await ac.get(
-            f"/grapi/v1/favorite/folders/{str(folder_id)}", params={"user_id": str(user_id)}
+            f"/grapi/v1/favorite/folders/{str(folder_id)}",
+            params={"user_id": str(user_id)},
         )
 
         res_data = response.json()
@@ -110,3 +114,30 @@ async def test_service_get_favorite_folder_detail():
 
         assert "created_at" in data
         assert "updated_at" in data
+
+
+@pytest.mark.asyncio
+async def test_renamerename_favorite_folder_router():
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        folder_id = SEED_ALICE_FOLDER_ID
+        folder_name = str(uuid.uuid4()) + "-router-test"
+
+        params = FavoriteFolderUpdateInSchema(user_id=SEED_ALICE_ID, name=folder_name)
+        response = await ac.patch(
+            f"/grapi/v1/favorite/folders/{folder_id}",
+            params=params.model_dump(mode="json"),
+        )
+
+        res_data = response.json()
+        print(res_data)
+
+        assert res_data["code"] == 0
+        assert res_data["msg"] == "success"
+
+
+        assert res_data["data"]["id"] == str(folder_id)
+
+        assert "created_at" in res_data["data"]
+        assert "updated_at" in res_data["data"]
