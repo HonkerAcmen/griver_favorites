@@ -35,6 +35,7 @@ class FolderService:
             await self.session.commit()
 
             return {
+                "id": folder.id,
                 "name": folder.name,
                 "user_id": folder.user_id,
                 "created_at": folder.created_at,
