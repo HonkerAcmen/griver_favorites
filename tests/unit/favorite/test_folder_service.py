@@ -25,6 +25,7 @@ async def session():
 
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
+SEED_ALICE_FOLDER_ID = uuid.UUID("fa500001-0001-4000-8000-000000000101")
 
 
 @pytest.mark.asyncio
@@ -79,3 +80,25 @@ async def test_list_favorite_folders(session: AsyncSession):
     assert "total" in result
     assert result["page"] == params.page
     assert result["page_size"] == params.page_size
+
+
+@pytest.mark.asyncio
+async def test_get_favorite_folder_detail(session: AsyncSession):
+    user_id = SEED_ALICE_ID
+    folder_id = SEED_ALICE_FOLDER_ID
+
+    service = FolderService(session=session)
+    result = await service.get_favorite_folder_detail(
+        user_id=user_id, folder_id=folder_id
+    )
+    assert isinstance(result, dict)
+    assert result["id"] == folder_id
+
+    assert "name" in result
+    assert len(result["name"]) <= 100
+
+    assert "item_count" in result
+    assert result["item_count"] >= 0
+
+    assert "created_at" in result
+    assert "updated_at" in result

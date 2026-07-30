@@ -7,10 +7,13 @@ from apps.favorite.common.constants import FOLDER_NAME_MAX_LEN
 from apps.favorite.exceptions import (
     FavoriteFolderNameInvalidException,
     FavoriteFolderNameDuplicateException,
+    FavoriteFolderNotFoundException,
 )
 from apps.favorite.repositories.folder import (
     favorite_create_folder,
     favorite_folder_list_by_user,
+    favorite_folder_find_by_id_and_user,
+    favorite_folder_count_items,
 )
 from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
 
@@ -57,4 +60,30 @@ class FolderService:
             "total": total,
             "page": params.page,
             "page_size": params.page_size,
+        }
+
+    async def get_favorite_folder_detail(
+        self, user_id: uuid.UUID, folder_id: uuid.UUID
+    ) -> dict:
+        """
+        folder = await favorite_folder_find_by_id_and_user(...)
+        若 None → FavoriteFolderNotFoundException（R3）
+        item_count = await favorite_folder_count_items(...)
+        返回 { id, name, item_count, created_at, updated_at }
+        """
+        folder = await favorite_folder_find_by_id_and_user(
+            self.session, folder_id, user_id
+        )
+
+        if folder is None:
+            raise FavoriteFolderNotFoundException()
+
+        count = await favorite_folder_count_items(self.session, folder_id)
+
+        return {
+            "id": folder.id,
+            "name": folder.name,
+            "item_count": count,
+            "created_at": folder.created_at,
+            "updated_at": folder.updated_at,
         }
