@@ -7,6 +7,7 @@ from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
 from main import app
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
+SEED_ALICE_FOLDER_ID = uuid.UUID("fa500001-0001-4000-8000-000000000101")
 
 
 @pytest.mark.asyncio
@@ -80,3 +81,32 @@ async def test_list_favorite_folders_router():
         assert "id" in folder
         assert folder["user_id"] == str(SEED_ALICE_ID)
         assert "name" in folder
+
+
+@pytest.mark.asyncio
+async def test_service_get_favorite_folder_detail():
+    user_id = SEED_ALICE_ID
+    folder_id = SEED_ALICE_FOLDER_ID
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get(
+            f"/grapi/v1/favorite/folders/{str(folder_id)}", params={"user_id": str(user_id)}
+        )
+
+        res_data = response.json()
+        assert res_data["code"] == 0
+        assert res_data["msg"] == "success"
+
+        data = res_data["data"]
+
+        assert data["id"] == str(folder_id)
+
+        assert "name" in data
+        assert len(data["name"]) <= 100
+
+        assert "item_count" in data
+        assert data["item_count"] >= 0
+
+        assert "created_at" in data
+        assert "updated_at" in data

@@ -1,7 +1,8 @@
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, status
-from fastapi.params import Depends, Query
+from fastapi.params import Depends, Query, Path
 
 from apps.core.response import success
 from apps.favorite.dependencies import get_folder_service
@@ -30,3 +31,13 @@ async def list_favorite_folders(
 ):
     result = await service.list_favorite_folders(params=payload)
     return success(data=result)
+
+
+@router.get("/{folder_id}", status_code=status.HTTP_200_OK)
+async def get_favorite_folder_detail(
+    folder_id: Annotated[uuid.UUID, Path(description="收藏夹ID")],
+    user_id: Annotated[uuid.UUID, Query(description="用户ID")],
+    service: FolderService = Depends(get_folder_service)
+):
+    res = await service.get_favorite_folder_detail(user_id, folder_id)
+    return success(data=res)

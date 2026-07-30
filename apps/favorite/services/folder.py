@@ -65,12 +65,7 @@ class FolderService:
     async def get_favorite_folder_detail(
         self, user_id: uuid.UUID, folder_id: uuid.UUID
     ) -> dict:
-        """
-        folder = await favorite_folder_find_by_id_and_user(...)
-        若 None → FavoriteFolderNotFoundException（R3）
-        item_count = await favorite_folder_count_items(...)
-        返回 { id, name, item_count, created_at, updated_at }
-        """
+
         folder = await favorite_folder_find_by_id_and_user(
             self.session, folder_id, user_id
         )
