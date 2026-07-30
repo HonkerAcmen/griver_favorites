@@ -1,4 +1,6 @@
+import datetime
 import uuid
+from datetime import timezone
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +20,7 @@ from apps.favorite.repositories.folder import (
     favorite_folder_update_name,
 )
 from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
+from tests.unit.favorite.test_repo import session
 
 
 class FolderService:
@@ -86,6 +89,27 @@ class FolderService:
             "updated_at": folder.updated_at,
         }
 
-    async def rename_favorite_folder(self, user_id, folder_id, name)->GriverFavoriteFolder:
-        folder = await favorite_folder_find_by_id_and_user(session=self.session, user_id=user_id, folder_id=folder_id)
-        return  await favorite_folder_update_name(session=self.session, folder=folder, new_name=name)
+    async def rename_favorite_folder(
+        self, user_id:uuid.UUID, folder_id: uuid.UUID, name: str
+    ) -> GriverFavoriteFolder:
+        clean_name = name.strip()
+        if len(clean_name) == 0:
+            raise FavoriteFolderNameInvalidException()
+
+        folder = await favorite_folder_find_by_id_and_user(
+            session=self.session, user_id=user_id, folder_id=folder_id
+        )
+
+        if not folder:
+            raise FavoriteFolderNotFoundException()
+
+        if folder.name == clean_name:
+            folder.updated_at = datetime.datetime.now(timezone.utc)
+            new_folder = folder
+        else:
+            new_folder = await favorite_folder_update_name(
+                session=self.session, folder=folder, new_name=name
+            )
+
+        await self.session.commit()
+        return new_folder

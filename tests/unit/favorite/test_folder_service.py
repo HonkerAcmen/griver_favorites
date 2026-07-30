@@ -111,9 +111,32 @@ async def test_rename_favorite_folder(session: AsyncSession):
     new_folder_name = str(uuid.uuid4()) + "-service-test"
 
     service = FolderService(session)
-    new_folder = await service.rename_favorite_folder(user_id, folder_id, name=new_folder_name)
+    new_folder = await service.rename_favorite_folder(
+        user_id, folder_id, name=new_folder_name
+    )
 
     assert isinstance(new_folder, GriverFavoriteFolder)
+
     assert new_folder.id == folder_id
     assert new_folder.user_id == user_id
     assert new_folder.name == new_folder_name
+
+    # 测试再次重命名是否幂等
+    new_folder = await service.rename_favorite_folder(
+        user_id, folder_id, name=new_folder_name
+    )
+    assert new_folder.id == folder_id
+    assert new_folder.user_id == user_id
+    assert new_folder.name == new_folder_name
+
+
+@pytest.mark.asyncio
+async def test_rename_favorite_folder_len_exception(session: AsyncSession):
+    user_id = SEED_ALICE_ID
+    folder_id = SEED_ALICE_FOLDER_ID
+    new_folder_name = "   "
+
+    service = FolderService(session)
+
+    with pytest.raises(FavoriteFolderNameInvalidException):
+        await service.rename_favorite_folder(user_id, folder_id, name=new_folder_name)
