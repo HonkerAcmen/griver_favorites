@@ -11,6 +11,7 @@ from apps.favorite.repositories.folder import (
     favorite_folder_find_by_id_and_user,
     favorite_folder_count_by_name,
     favorite_folder_list_by_user,
+    favorite_folder_count_items,
 )
 from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
 
@@ -177,3 +178,12 @@ async def test_intelligence_find_by_id_not_deleted_returns_bool_or_none(
         session, SEED_INTELLIGENCE_DELETED_ID
     )
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_favorite_folder_count_items_returns_count(session: AsyncSession):
+    folder_id = SEED_ALICE_FOLDER_ID
+    result = await favorite_folder_count_items(session, folder_id)
+
+    assert isinstance(result, int)
+    assert result >= 0

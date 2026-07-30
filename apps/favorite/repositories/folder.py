@@ -4,7 +4,7 @@ from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.favorite.models import GriverFavoriteFolder
+from apps.favorite.models import GriverFavoriteFolder, GriverFavoriteItem
 
 
 # 创建新文件夹
@@ -99,3 +99,19 @@ async def favorite_folder_list_by_user(
 
         items: list[GriverFavoriteFolder] = list(res.scalars().all())
         return items, total
+
+
+async def favorite_folder_count_items(session, folder_id: uuid.UUID) -> int:
+    # SELECT count(*) FROM griver_favorite_item
+    # WHERE folder_id = ? AND is_deleted = false
+    smt = (
+        select(func.count())
+        .select_from(GriverFavoriteItem)
+        .where(
+            GriverFavoriteItem.folder_id == folder_id,
+            GriverFavoriteItem.is_deleted.is_(False),
+        )
+    )
+
+    result = await session.execute(smt)
+    return result.scalar() or 0
