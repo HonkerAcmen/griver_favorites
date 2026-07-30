@@ -43,3 +43,23 @@ class FavoriteFolderNameInvalidException(BusinessException):
 
     def __init__(self) -> None:
         super().__init__(400001, "FAVORITE_FOLDER_NAME_INVALID")
+
+
+class FavoriteItemNotFoundException(BusinessException):
+    def __init__(self) -> None:
+        super().__init__(404041, "FAVORITE_ITEM_NOT_EXISTS")
+
+
+class IntelligenceNotFoundException(BusinessException):
+    def __init__(self) -> None:
+        super().__init__(404042, "INTELLIGENCE_NOT_EXISTS")
+
+
+class FavoriteItemAlreadyExistsException(BusinessException):
+    def __init__(self) -> None:
+        super().__init__(409041, "FAVORITE_ITEM_ALREADY_EXISTS")
+
+
+class FavoriteItemMoveFailedException(BusinessException):
+    def __init__(self) -> None:
+        super().__init__(400041, "FAVORITE_ITEM_MOVE_FAILED")
