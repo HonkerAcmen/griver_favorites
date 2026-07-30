@@ -35,7 +35,7 @@ class FolderService:
 
         try:
             folder = await favorite_create_folder(
-                self.session, user_id, folder_name=name
+                self.session, user_id, folder_name=cleaned
             )
             await self.session.flush()
             await self.session.commit()
@@ -118,13 +118,18 @@ class FolderService:
     async def delete_favorite_folder(
         self, user_id: uuid.UUID, folder_id: uuid.UUID
     ) -> tuple[list[GriverFavoriteItem], GriverFavoriteFolder]:
-        async with self.session.begin():
-            items = await favorite_item_soft_delete_by_folder_id(self.session, folder_id=folder_id)
-            folder = await favorite_folder_find_by_id_and_user(self.session, user_id=user_id, folder_id=folder_id)
+        items = await favorite_item_soft_delete_by_folder_id(
+            self.session, folder_id=folder_id
+        )
+        folder = await favorite_folder_find_by_id_and_user(
+            self.session, user_id=user_id, folder_id=folder_id
+        )
 
-            if not folder:
-                raise FavoriteFolderNotFoundException()
+        if not folder:
+            raise FavoriteFolderNotFoundException()
 
-            deleted_folder = await  favorite_folder_soft_delete(self.session, folder=folder)
-
-            return items, deleted_folder
+        deleted_folder = await favorite_folder_soft_delete(
+            self.session, folder=folder
+        )
+        await self.session.commit()
+        return items, deleted_folder

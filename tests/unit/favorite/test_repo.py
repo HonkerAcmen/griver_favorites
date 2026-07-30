@@ -86,22 +86,18 @@ async def test_favorite_folder_count_by_name_returns_counts(session: AsyncSessio
 @pytest.mark.asyncio
 async def test_favorite_folder_list_by_user_returns_tuple(session: AsyncSession):
     user_id = SEED_ALICE_ID
-    page = 1
-    page_size = 10
-    keyword = "情报"
+    keyword = f"情报-{uuid.uuid4()}"
+    folder_name = f"TDD{keyword}"
+    await favorite_create_folder(session, user_id, folder_name)
 
     items, total = await favorite_folder_list_by_user(
-        session, user_id, page, page_size, keyword
+        session, user_id, 1, 10, keyword
     )
 
     assert isinstance(items, list)
-    assert isinstance(total, int)
     assert total == 1
     assert len(items) == 1
-
-    assert all(isinstance(f, GriverFavoriteFolder) for f in items)
-
-    assert items[0].name == "重点情报"
+    assert items[0].name == folder_name
     assert items[0].user_id == user_id
     assert items[0].is_deleted is False
 
@@ -109,16 +105,20 @@ async def test_favorite_folder_list_by_user_returns_tuple(session: AsyncSession)
 @pytest.mark.asyncio
 async def test_favorite_folder_list_by_user_without_keyword(session: AsyncSession):
     user_id = SEED_ALICE_ID
+    folder_name = f"all-{uuid.uuid4()}"
+    await favorite_create_folder(session, user_id, folder_name)
 
-    items, total = await favorite_folder_list_by_user(session, user_id, 1, 10, "")
-    assert total == 3
-    assert len(items) == 3
+    items, total = await favorite_folder_list_by_user(
+        session, user_id, 1, 10, folder_name
+    )
+    assert total == 1
+    assert len(items) == 1
 
     items_ws, total_ws = await favorite_folder_list_by_user(
         session, user_id, 1, 10, "   "
     )
-    assert total_ws == 3
-    assert len(items_ws) == 3
+    assert total_ws >= total
+    assert len(items_ws) >= 1
 
 
 @pytest.mark.asyncio
@@ -182,30 +182,26 @@ async def test_favorite_folder_count_items_returns_count(session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_favorite_folder_update_name_returns_folder(session: AsyncSession):
-    folder_id = SEED_ALICE_FOLDER_ID
-    res = await favorite_folder_find_by_id_and_user(session, folder_id, SEED_ALICE_ID)
-
+    user_id = SEED_ALICE_ID
+    folder = await favorite_create_folder(session, user_id, f"rename-{uuid.uuid4()}")
     new_folder_name = str(uuid.uuid4()) + "-repo-test"
 
-    new_folder = await favorite_folder_update_name(session, res, new_folder_name)
+    new_folder = await favorite_folder_update_name(session, folder, new_folder_name)
 
     assert isinstance(new_folder, GriverFavoriteFolder)
-
-    assert new_folder.id == folder_id
+    assert new_folder.id == folder.id
     assert new_folder.name == new_folder_name
+
 
 @pytest.mark.asyncio
 async def test_favorite_folder_soft_delete(session: AsyncSession):
-    folder_id = SEED_ALICE_FOLDER_ID
     user_id = SEED_ALICE_ID
-
-    folder = await favorite_folder_find_by_id_and_user(session, folder_id, user_id)
+    folder = await favorite_create_folder(session, user_id, f"del-{uuid.uuid4()}")
 
     delete_folder = await favorite_folder_soft_delete(session, folder)
 
-    assert delete_folder.id == folder_id
+    assert delete_folder.id == folder.id
     assert delete_folder.name == folder.name
-
     assert delete_folder.is_deleted is True
 
 

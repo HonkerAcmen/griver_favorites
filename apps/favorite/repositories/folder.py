@@ -6,6 +6,7 @@ from sqlalchemy import func, update
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.favorite.common.constants import PAGE_MAX
 from apps.favorite.models import GriverFavoriteFolder, GriverFavoriteItem
 
 
@@ -51,7 +52,10 @@ async def favorite_folder_count_by_name(
 async def favorite_folder_list_by_user(
     session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int, keyword: str
 ) -> tuple[list[GriverFavoriteFolder], int] | None:
-    new_key_word = keyword.strip()
+    new_key_word = (keyword or "").strip()
+    effective_page = max(1, page)
+    effective_page_size = min(page_size, PAGE_MAX)
+    offset = (effective_page - 1) * effective_page_size
 
     if len(new_key_word) > 0:
         escaped_str = new_key_word.translate(
@@ -67,8 +71,8 @@ async def favorite_folder_list_by_user(
                 GriverFavoriteFolder.is_deleted.is_(False),
             )
             .order_by(GriverFavoriteFolder.updated_at.desc())
-            .offset(offset=(max(1, page) - 1) * page_size)
-            .limit(page_size)
+            .offset(offset)
+            .limit(effective_page_size)
         )
         total = await session.scalar(
             select(func.count()).where(
@@ -89,8 +93,8 @@ async def favorite_folder_list_by_user(
                 GriverFavoriteFolder.is_deleted.is_(False),
             )
             .order_by(GriverFavoriteFolder.updated_at.desc())
-            .offset(offset=(max(1, page) - 1) * page_size)
-            .limit(page_size)
+            .offset(offset)
+            .limit(effective_page_size)
         )
         total = await session.scalar(
             select(func.count()).where(
