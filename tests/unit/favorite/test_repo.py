@@ -18,6 +18,7 @@ from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_
 from apps.favorite.repositories.item import (
     favorite_item_create,
     favorite_item_find_by_id_and_user,
+    favorite_item_find_in_folder,
 )
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
@@ -245,13 +246,50 @@ async def test_favorite_item_create(session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_favorite_item_find_by_id_and_user(session: AsyncSession):
-    item_id = uuid.uuid4()
     user_id = SEED_ALICE_ID
+    item = await favorite_item_create(
+        session,
+        folder_id=SEED_ALICE_FOLDER_ID,
+        user_id=user_id,
+        target_id=uuid.uuid4(),
+        target_type='test-type',
+    )
 
-    item = await favorite_item_find_by_id_and_user(session, item_id=item_id, user_id=user_id)
-    if item:
+    find_item = await favorite_item_find_by_id_and_user(
+        session, item_id=item.id, user_id=user_id
+    )
+    assert find_item is not None
+    if find_item:
+        assert isinstance(find_item, GriverFavoriteItem)
+        assert find_item.id == item.id
+        assert find_item.user_id == user_id
+
+        assert find_item.is_deleted is False
+
+
+@pytest.mark.asyncio
+async def test_favorite_item_find_in_folder(session: AsyncSession):
+    folder_id = SEED_ALICE_FOLDER_ID
+    target_id = uuid.uuid4()
+    target_type = "test-type"
+    await favorite_item_create(
+        session,
+        folder_id=folder_id,
+        user_id=SEED_ALICE_ID,
+        target_id=target_id,
+        target_type=target_type,
+    )
+
+    item = await favorite_item_find_in_folder(
+        session, folder_id=folder_id, target_id=target_id, target_type=target_type
+    )
+
+    assert item is not None
+
+    if item is not None:
         assert isinstance(item, GriverFavoriteItem)
-        assert item.id == item_id
-        assert item.user_id == user_id
+        assert item.folder_id == folder_id
+        assert item.target_id == target_id
+        assert item.target_type == target_type
 
         assert item.is_deleted is False
