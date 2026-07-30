@@ -37,8 +37,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         if "uq_griver_favorite_item_folder_target_active" in message:
             dup = FavoriteItemAlreadyExistsException()
             return JSONResponse(
-                status_code=dup.http_status,
-                content=business_fail(dup.code, dup.msg)
+                status_code=dup.http_status, content=business_fail(dup.code, dup.msg)
             )
         return JSONResponse(
             status_code=200,

@@ -128,8 +128,6 @@ class FolderService:
         if not folder:
             raise FavoriteFolderNotFoundException()
 
-        deleted_folder = await favorite_folder_soft_delete(
-            self.session, folder=folder
-        )
+        deleted_folder = await favorite_folder_soft_delete(self.session, folder=folder)
         await self.session.commit()
         return items, deleted_folder

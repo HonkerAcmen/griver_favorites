@@ -16,7 +16,6 @@ from apps.favorite.repositories.folder import (
 )
 from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
 
-
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
 SEED_BOB_ID = uuid.UUID("fa500001-0002-4000-8000-000000000002")
 SEED_ALICE_FOLDER_ID = uuid.UUID("fa500001-0001-4000-8000-000000000101")
@@ -90,9 +89,7 @@ async def test_favorite_folder_list_by_user_returns_tuple(session: AsyncSession)
     folder_name = f"TDD{keyword}"
     await favorite_create_folder(session, user_id, folder_name)
 
-    items, total = await favorite_folder_list_by_user(
-        session, user_id, 1, 10, keyword
-    )
+    items, total = await favorite_folder_list_by_user(session, user_id, 1, 10, keyword)
 
     assert isinstance(items, list)
     assert total == 1
