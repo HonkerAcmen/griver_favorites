@@ -8,10 +8,12 @@ from apps.favorite.exceptions import (
     FavoriteFolderNameDuplicateException,
     FavoriteFolderNotFoundException,
     FavoriteItemAlreadyExistsException,
+    FavoriteItemNotFoundException,
 )
 from apps.favorite.models import GriverFavoriteFolder, GriverFavoriteItem
 from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
 from apps.favorite.services.folder import FolderService
+from apps.favorite.services.item import ItemService
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
 SEED_BOB_ID = uuid.UUID("fa500001-0002-4000-8000-000000000002")
@@ -244,13 +246,16 @@ async def test_create_folder_after_soft_delete_same_name(session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_add_item_to_folder(session: AsyncSession):
-    service = FolderService(session=session)
+    service = ItemService(session=session)
+    folder_service = FolderService(session=session)
     folder_name = str(uuid.uuid4()) + "-service-test"
     intelligence_id = SEED_INTELLIGENCE_ID
     user_id = SEED_ALICE_ID
 
     # TODO 注意此处，情报需要创建新的，再添加到文件夹中，再删除出去，这里进行了简化，后期酌情修改
-    create_folder = await service.create_folder(user_id=user_id, name=folder_name)
+    create_folder = await folder_service.create_folder(
+        user_id=user_id, name=folder_name
+    )
 
     item = await service.add_item_to_folder(
         user_id=SEED_ALICE_ID,
@@ -264,13 +269,72 @@ async def test_add_item_to_folder(session: AsyncSession):
     assert item["target_id"] == intelligence_id
     assert item["is_deleted"] is False
 
-    await service.delete_favorite_folder(user_id, create_folder["id"])
+    await folder_service.delete_favorite_folder(user_id, create_folder["id"])
     with pytest.raises(FavoriteFolderNotFoundException):
         await service.add_item_to_folder(user_id, create_folder["id"], intelligence_id)
 
     # folder内item不重复
-    create_folder = await service.create_folder(user_id=user_id, name=folder_name)
+    create_folder = await folder_service.create_folder(
+        user_id=user_id, name=folder_name
+    )
     await service.add_item_to_folder(user_id, create_folder["id"], intelligence_id)
     with pytest.raises(FavoriteItemAlreadyExistsException):
         await service.add_item_to_folder(user_id, create_folder["id"], intelligence_id)
-    await service.delete_favorite_folder(user_id, create_folder["id"])
+    await folder_service.delete_favorite_folder(user_id, create_folder["id"])
+
+
+@pytest.mark.asyncio
+async def test_remove_item_from_folder(session: AsyncSession):
+    item_service = ItemService(session=session)
+    user_id = SEED_ALICE_ID
+    folder_id = SEED_INTELLIGENCE_ID
+    intelligence_id = uuid.uuid4()
+
+    # 遇到不存在的item_id
+    new_item = await item_service.add_item_to_folder(
+        user_id=user_id, folder_id=folder_id, intelligence_id=intelligence_id
+    )
+    with pytest.raises(FavoriteItemNotFoundException):
+        await item_service.remove_item_from_folder(
+            user_id=user_id, folder_id=folder_id, item_id=uuid.uuid4()
+        )
+
+    await item_service.remove_item_from_folder(
+        user_id=user_id, folder_id=folder_id, item_id=new_item["id"]
+    )
+
+    # 能正常删除
+    new_item = await item_service.add_item_to_folder(
+        user_id=user_id, folder_id=folder_id, intelligence_id=intelligence_id
+    )
+    delete_item = await item_service.remove_item_from_folder(
+        user_id=user_id, folder_id=folder_id, item_id=new_item["id"]
+    )
+    assert delete_item["user_id"] == user_id
+    assert delete_item["folder_id"] == folder_id
+    assert delete_item["target_id"] == intelligence_id
+
+    # TODO 遇到不存在的user_id 以后再补 不是本轮任务
+    # new_item = await item_service.add_item_to_folder(user_id=user_id, folder_id=folder_id, intelligence_id=intelligence_id)
+
+    # 遇到不存在的folder_id
+    new_item = await item_service.add_item_to_folder(
+        user_id=user_id, folder_id=folder_id, intelligence_id=intelligence_id
+    )
+    with pytest.raises(FavoriteItemNotFoundException):
+        await item_service.remove_item_from_folder(
+            user_id=user_id, folder_id=uuid.uuid4(), item_id=new_item["id"]
+        )
+
+    await item_service.remove_item_from_folder(
+        user_id=user_id, folder_id=folder_id, item_id=new_item["id"]
+    )
+
+    # 被删除的item是不是这个folder的
+    new_item = await item_service.add_item_to_folder(
+        user_id=user_id, folder_id=folder_id, intelligence_id=intelligence_id
+    )
+    delete_item = await item_service.remove_item_from_folder(
+        user_id=user_id, folder_id=folder_id, item_id=new_item["id"]
+    )
+    assert delete_item["folder_id"] == folder_id

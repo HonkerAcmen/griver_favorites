@@ -6,9 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.favorite.exceptions import (
     FavoriteFolderNotFoundException,
     FavoriteItemAlreadyExistsException,
+    FavoriteItemNotFoundException,
 )
 from apps.favorite.repositories.folder import favorite_folder_find_by_id_and_user
-from apps.favorite.repositories.item import favorite_item_create
+from apps.favorite.repositories.item import (
+    favorite_item_create,
+    favorite_item_soft_delete,
+    favorite_item_find_by_id_and_user,
+)
 
 
 class ItemService:
@@ -48,4 +53,20 @@ class ItemService:
             "target_id": item.target_id,
             "target_type": item.target_type,
             "is_deleted": item.is_deleted,
+        }
+
+    async def remove_item_from_folder(self, user_id, folder_id, item_id)->dict:
+
+        item = await favorite_item_find_by_id_and_user(self.session, user_id=user_id, item_id=item_id)
+        if item is None:
+            raise FavoriteItemNotFoundException()
+
+        del_item = await favorite_item_soft_delete(self.session, item)
+        await self.session.commit()
+        
+        return {
+            "user_id": del_item.user_id,
+            "folder_id": del_item.folder_id,
+            "target_id": del_item.target_id,
+            "target_type": del_item.target_type,
         }

@@ -46,20 +46,48 @@ class FavoriteFolderNameInvalidException(BusinessException):
 
 
 class FavoriteItemNotFoundException(BusinessException):
+    """收藏项不存在、已软删或不属于当前 user。
+
+    适用于：取消收藏、移动收藏项、查看指定收藏项详情等操作前校验失败。
+    """
+
     def __init__(self) -> None:
         super().__init__(404041, "FAVORITE_ITEM_NOT_EXISTS")
 
 
 class IntelligenceNotFoundException(BusinessException):
+    """目标情报资源不存在或已被物理/逻辑删除。
+
+    适用于：添加收藏时校验 target_id 对应的情报实体是否存在。
+    """
+
     def __init__(self) -> None:
         super().__init__(404042, "INTELLIGENCE_NOT_EXISTS")
 
 
 class FavoriteItemAlreadyExistsException(BusinessException):
+    """当前用户已收藏过该目标资源（唯一性约束冲突）。
+
+    适用于：重复添加相同 target_id 的情报，或捕获到 uq_griver_favorite_item_folder_target_active 数据库唯一索引冲突。
+    """
+
     def __init__(self) -> None:
         super().__init__(409041, "FAVORITE_ITEM_ALREADY_EXISTS")
 
 
 class FavoriteItemMoveFailedException(BusinessException):
+    """收藏项移动操作失败。
+
+    适用于：试图将收藏项移动到当前所在的同一个文件夹、目标文件夹非法或目标位置已被占用等无效变更操作。
+    """
+
     def __init__(self) -> None:
         super().__init__(400041, "FAVORITE_ITEM_MOVE_FAILED")
+
+
+class FavoriteUserNotFoundException(BusinessException):
+    """
+    用户无效
+    """
+    def __init__(self) -> None:
+        super().__init__(404041, "FAVORITE_USER_NOT_EXISTS")
