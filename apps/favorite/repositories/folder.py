@@ -2,7 +2,7 @@ import datetime
 import uuid
 from datetime import timezone
 
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -123,14 +123,34 @@ async def favorite_folder_update_name(
     session, folder: GriverFavoriteFolder, new_name: str
 ) -> GriverFavoriteFolder:
     folder.name = new_name
-    
+
     folder.updated_at = datetime.datetime.now(timezone.utc)
     await session.flush()
     return folder
 
-async def favorite_folder_soft_delete(session:AsyncSession, folder: GriverFavoriteFolder) -> GriverFavoriteFolder:
+
+async def favorite_folder_soft_delete(
+    session: AsyncSession, folder: GriverFavoriteFolder
+) -> GriverFavoriteFolder:
     folder.is_deleted = True
     folder.updated_at = datetime.datetime.now(timezone.utc)
 
     await session.flush()
     return folder
+
+
+async def favorite_item_soft_delete_by_folder_id(
+    session: AsyncSession, folder_id: uuid.UUID
+) -> list[GriverFavoriteItem]:
+    smt = (
+        update(GriverFavoriteItem)
+        .where(
+            GriverFavoriteItem.folder_id == folder_id,
+            GriverFavoriteItem.is_deleted.is_(False),
+        )
+        .values(is_deleted=True)
+        .returning(GriverFavoriteItem)
+    )
+
+    items = await session.execute(smt)
+    return list(items.scalars().all())

@@ -5,7 +5,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.core.database import SessionLocal, engine
-from apps.favorite.models import GriverFavoriteFolder, Intelligence
+from apps.favorite.models import GriverFavoriteFolder, Intelligence, GriverFavoriteItem
 from apps.favorite.repositories.folder import (
     favorite_create_folder,
     favorite_folder_find_by_id_and_user,
@@ -14,6 +14,7 @@ from apps.favorite.repositories.folder import (
     favorite_folder_count_items,
     favorite_folder_update_name,
     favorite_folder_soft_delete,
+    favorite_item_soft_delete_by_folder_id,
 )
 from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
 
@@ -218,3 +219,17 @@ async def test_favorite_folder_soft_delete(session: AsyncSession):
     assert delete_folder.name == folder.name
 
     assert delete_folder.is_deleted is True
+
+
+@pytest.mark.asyncio
+async def test_favorite_item_soft_delete_by_folder_id(session: AsyncSession):
+    folder_id = SEED_ALICE_FOLDER_ID
+
+    items = await favorite_item_soft_delete_by_folder_id(session, folder_id)
+
+    if len(items) > 0:
+        assert isinstance(items, list)
+        assert isinstance(items[0], GriverFavoriteItem)
+
+        assert items[0].folder_id == folder_id
+        assert items[0].is_deleted is True
