@@ -14,4 +14,3 @@ async def session():
         ) as s:
             yield s
         await trans.rollback()
-    await engine.dispose()

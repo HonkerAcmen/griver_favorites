@@ -55,15 +55,17 @@ class ItemService:
             "is_deleted": item.is_deleted,
         }
 
-    async def remove_item_from_folder(self, user_id, folder_id, item_id)->dict:
+    async def remove_item_from_folder(self, user_id, folder_id, item_id) -> dict:
 
-        item = await favorite_item_find_by_id_and_user(self.session, user_id=user_id, item_id=item_id)
-        if item is None:
+        item = await favorite_item_find_by_id_and_user(
+            self.session, user_id=user_id, item_id=item_id
+        )
+        if item is None or item.folder_id != folder_id:
             raise FavoriteItemNotFoundException()
 
         del_item = await favorite_item_soft_delete(self.session, item)
         await self.session.commit()
-        
+
         return {
             "user_id": del_item.user_id,
             "folder_id": del_item.folder_id,

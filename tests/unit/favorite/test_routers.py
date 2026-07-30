@@ -19,6 +19,7 @@ SEED_BOB_FOLDER_ID = uuid.UUID("fa500001-0002-4000-8000-000000000101")
 
 FOLDER_DEFAULT_URL = "/grapi/v1/favorite/folders"
 
+
 @pytest.mark.asyncio
 async def test_create_folder():
     user_id = SEED_ALICE_ID
@@ -95,12 +96,20 @@ async def test_list_favorite_folders_router():
 @pytest.mark.asyncio
 async def test_service_get_favorite_folder_detail():
     user_id = SEED_ALICE_ID
-    folder_id = SEED_ALICE_FOLDER_ID
+    folder_name = f"detail-router-{uuid.uuid4()}"
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
+        create_resp = await ac.post(
+            FOLDER_DEFAULT_URL,
+            json={"user_id": str(user_id), "name": folder_name},
+        )
+        assert create_resp.status_code == 201
+        folder_id = create_resp.json()["data"]["id"]
+
         response = await ac.get(
-            f"/grapi/v1/favorite/folders/{str(folder_id)}",
+            f"/grapi/v1/favorite/folders/{folder_id}",
             params={"user_id": str(user_id)},
         )
 
@@ -109,26 +118,28 @@ async def test_service_get_favorite_folder_detail():
         assert res_data["msg"] == "success"
 
         data = res_data["data"]
-
         assert data["id"] == str(folder_id)
-
-        assert "name" in data
+        assert data["name"] == folder_name
         assert len(data["name"]) <= 100
-
         assert "item_count" in data
         assert data["item_count"] >= 0
-
         assert "created_at" in data
         assert "updated_at" in data
 
 
 @pytest.mark.asyncio
 async def test_renamerename_favorite_folder_router():
+    folder_name = str(uuid.uuid4()) + "-router-test"
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
-        folder_id = SEED_ALICE_FOLDER_ID
-        folder_name = str(uuid.uuid4()) + "-router-test"
+        create_resp = await ac.post(
+            FOLDER_DEFAULT_URL,
+            json={"user_id": str(SEED_ALICE_ID), "name": f"rename-src-{uuid.uuid4()}"},
+        )
+        assert create_resp.status_code == 201
+        folder_id = create_resp.json()["data"]["id"]
 
         params = FavoriteFolderUpdateInSchema(user_id=SEED_ALICE_ID, name=folder_name)
         response = await ac.patch(
@@ -137,13 +148,9 @@ async def test_renamerename_favorite_folder_router():
         )
 
         res_data = response.json()
-        print(res_data)
-
         assert res_data["code"] == 0
         assert res_data["msg"] == "success"
-
         assert res_data["data"]["id"] == str(folder_id)
-
         assert "created_at" in res_data["data"]
         assert "updated_at" in res_data["data"]
 
@@ -180,6 +187,7 @@ async def test_delete_favorite_folder_router():
         )
         get_data = get_response.json()
         assert get_data["code"] == 404001
+
 
 @pytest.mark.asyncio
 async def test_add_item_to_folder():

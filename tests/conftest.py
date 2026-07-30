@@ -1,4 +1,4 @@
-"""集成测试公共 fixture：每用例结束后释放 DB 连接池，避免 event loop 冲突。"""
+"""全局测试 fixture：每用例结束后释放 DB 连接池，避免 asyncpg event loop 冲突。"""
 
 import pytest_asyncio
 

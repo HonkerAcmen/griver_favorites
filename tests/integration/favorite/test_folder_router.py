@@ -38,16 +38,25 @@ async def test_create_folder_success():
 
 @pytest.mark.asyncio
 async def test_list_folders_with_keyword():
+    keyword = f"重点-{uuid.uuid4().hex[:8]}"
+    folder_name = f"集成{keyword}测试"
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
+        create_resp = await client.post(
+            FOLDERS_URL,
+            json={"user_id": str(SEED_ALICE_ID), "name": folder_name},
+        )
+        assert create_resp.status_code == 201
+
         response = await client.get(
             FOLDERS_URL,
             params={
                 "user_id": str(SEED_ALICE_ID),
                 "page": 1,
                 "page_size": 10,
-                "keyword": "重点",
+                "keyword": keyword,
             },
         )
 
@@ -55,18 +64,26 @@ async def test_list_folders_with_keyword():
     body = response.json()
     assert body["code"] == 0
 
-    items = body["data"]["items"]
-    names = [item["name"] for item in items]
-    assert "重点情报" in names
+    names = [item["name"] for item in body["data"]["items"]]
+    assert folder_name in names
 
 
 @pytest.mark.asyncio
 async def test_get_folder_detail_with_item_count():
+    folder_name = f"detail-{uuid.uuid4()}"
+
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
+        create_resp = await client.post(
+            FOLDERS_URL,
+            json={"user_id": str(SEED_ALICE_ID), "name": folder_name},
+        )
+        assert create_resp.status_code == 201
+        folder_id = create_resp.json()["data"]["id"]
+
         response = await client.get(
-            f"{FOLDERS_URL}/{SEED_ALICE_FOLDER_ID}",
+            f"{FOLDERS_URL}/{folder_id}",
             params={"user_id": str(SEED_ALICE_ID)},
         )
 
@@ -75,7 +92,8 @@ async def test_get_folder_detail_with_item_count():
     assert body["code"] == 0
 
     data = body["data"]
-    assert data["id"] == str(SEED_ALICE_FOLDER_ID)
+    assert data["id"] == str(folder_id)
+    assert data["name"] == folder_name
     assert "item_count" in data
     assert data["item_count"] >= 0
 

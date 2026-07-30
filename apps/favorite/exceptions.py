@@ -89,5 +89,6 @@ class FavoriteUserNotFoundException(BusinessException):
     """
     用户无效
     """
+
     def __init__(self) -> None:
         super().__init__(404041, "FAVORITE_USER_NOT_EXISTS")

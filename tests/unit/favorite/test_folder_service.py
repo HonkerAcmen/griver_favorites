@@ -286,11 +286,16 @@ async def test_add_item_to_folder(session: AsyncSession):
 @pytest.mark.asyncio
 async def test_remove_item_from_folder(session: AsyncSession):
     item_service = ItemService(session=session)
+    folder_service = FolderService(session=session)
     user_id = SEED_ALICE_ID
-    folder_id = SEED_INTELLIGENCE_ID
-    intelligence_id = uuid.uuid4()
+    intelligence_id = SEED_INTELLIGENCE_ID
 
-    # 遇到不存在的item_id
+    create_folder = await folder_service.create_folder(
+        user_id=user_id, name=f"remove-item-{uuid.uuid4()}"
+    )
+    folder_id = uuid.UUID(str(create_folder["id"]))
+
+    # 遇到不存在的 item_id
     new_item = await item_service.add_item_to_folder(
         user_id=user_id, folder_id=folder_id, intelligence_id=intelligence_id
     )

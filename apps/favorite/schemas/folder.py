@@ -19,5 +19,3 @@ class FavoriteFolderListQueryParams(BaseModel):
 class FavoriteFolderUpdateInSchema(BaseModel):
     user_id: uuid.UUID
     name: str
-
-
