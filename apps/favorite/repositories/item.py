@@ -88,7 +88,7 @@ async def favorite_item_list_by_folder(
             (Intelligence.id == GriverFavoriteItem.target_id)
             & (GriverFavoriteItem.target_type == "intelligence"),
         )
-        .where(*collect) 
+        .where(*collect)
     )
 
     count_stmt = select(func.count()).select_from(base_stmt.subquery())

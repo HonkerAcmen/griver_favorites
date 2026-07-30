@@ -19,3 +19,8 @@ class FavoriteFolderListQueryParams(BaseModel):
 class FavoriteFolderUpdateInSchema(BaseModel):
     user_id: uuid.UUID
     name: str
+
+
+class FavoriteItemCreateInSchema(BaseModel):
+    user_id: uuid.UUID
+    intelligence_id: uuid.UUID
