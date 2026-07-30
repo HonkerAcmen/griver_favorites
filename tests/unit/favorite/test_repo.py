@@ -1,10 +1,8 @@
 import uuid
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.core.database import SessionLocal, engine
 from apps.favorite.models import GriverFavoriteFolder, Intelligence, GriverFavoriteItem
 from apps.favorite.repositories.folder import (
     favorite_create_folder,
@@ -17,16 +15,6 @@ from apps.favorite.repositories.folder import (
     favorite_item_soft_delete_by_folder_id,
 )
 from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
-
-
-@pytest_asyncio.fixture
-async def session():
-    async with SessionLocal() as s:
-        try:
-            yield s
-        finally:
-            await s.rollback()
-    await engine.dispose()
 
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")

@@ -1,27 +1,15 @@
 import uuid
 
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.core.database import SessionLocal, engine
 from apps.favorite.exceptions import (
     FavoriteFolderNameInvalidException,
     FavoriteFolderNameDuplicateException,
 )
-from apps.favorite.models import GriverFavoriteFolder
+from apps.favorite.models import GriverFavoriteFolder, GriverFavoriteItem
 from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
 from apps.favorite.services.folder import FolderService
-
-
-@pytest_asyncio.fixture
-async def session():
-    async with SessionLocal() as s:
-        try:
-            yield s
-        finally:
-            await s.rollback()
-    await engine.dispose()
 
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
@@ -140,3 +128,19 @@ async def test_rename_favorite_folder_len_exception(session: AsyncSession):
 
     with pytest.raises(FavoriteFolderNameInvalidException):
         await service.rename_favorite_folder(user_id, folder_id, name=new_folder_name)
+
+@pytest.mark.asyncio
+async def test_delete_favorite_folder(session: AsyncSession):
+    user_id = SEED_ALICE_ID
+    folder_id = SEED_ALICE_FOLDER_ID
+
+    service = FolderService(session)
+    items, delete_folder = await service.delete_favorite_folder(user_id, folder_id)
+
+    if len(items) > 0:
+        assert isinstance(items, list)
+        assert isinstance(items[0], GriverFavoriteItem)
+        assert items[0].is_deleted is True
+
+    assert delete_folder.id == folder_id
+    assert delete_folder.is_deleted is True
