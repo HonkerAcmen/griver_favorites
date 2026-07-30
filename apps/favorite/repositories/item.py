@@ -39,7 +39,7 @@ async def favorite_item_find_by_id_and_user(
 
 async def favorite_item_find_in_folder(
     session: AsyncSession, folder_id: uuid.UUID, target_type: str, target_id: uuid.UUID
-)-> GriverFavoriteItem | None:
+) -> GriverFavoriteItem | None:
     # TODO 注意实现这个查询的索引
     smt = select(GriverFavoriteItem).where(
         GriverFavoriteItem.folder_id == folder_id,
@@ -52,8 +52,14 @@ async def favorite_item_find_in_folder(
     return result.scalar_one_or_none()
 
 
-async def favorite_item_soft_delete(session: AsyncSession, item):
-    pass
+async def favorite_item_soft_delete(
+    session: AsyncSession, item: GriverFavoriteItem
+) -> GriverFavoriteItem:
+    item.is_deleted = True
+    await session.flush()
+
+    return item
+
 
 
 async def favorite_item_list_by_folder(
