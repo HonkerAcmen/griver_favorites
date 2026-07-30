@@ -26,12 +26,6 @@ async def add_item_to_folder(
     return success(data=result)
 
 
-"""
-DELETE /folders/{folder_id}/items/{item_id}?user_id=...
-
-"""
-
-
 @router.delete("/folders/{folder_id}/items/{item_id}")
 async def remove_item_from_folder(
     folder_id: Annotated[uuid.UUID, Path(description="收藏夹ID")],
