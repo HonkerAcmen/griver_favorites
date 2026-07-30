@@ -12,12 +12,12 @@ from main import app
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
 SEED_ALICE_FOLDER_ID = uuid.UUID("fa500001-0001-4000-8000-000000000101")
+SEED_INTELLIGENCE_ID = uuid.UUID("fa700001-0001-4000-8000-000000000001")
 
 SEED_BOB_ID = uuid.UUID("fa500001-0002-4000-8000-000000000002")
 SEED_BOB_FOLDER_ID = uuid.UUID("fa500001-0002-4000-8000-000000000101")
 
 FOLDER_DEFAULT_URL = "/grapi/v1/favorite/folders"
-
 
 @pytest.mark.asyncio
 async def test_create_folder():
@@ -180,3 +180,39 @@ async def test_delete_favorite_folder_router():
         )
         get_data = get_response.json()
         assert get_data["code"] == 404001
+
+@pytest.mark.asyncio
+async def test_add_item_to_folder():
+    user_id = SEED_ALICE_ID
+    intelligence_id = SEED_INTELLIGENCE_ID
+    folder_name = f"item-router-{uuid.uuid4()}"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        create_resp = await ac.post(
+            FOLDER_DEFAULT_URL,
+            json={"user_id": str(user_id), "name": folder_name},
+        )
+        assert create_resp.status_code == 201
+        folder_id = create_resp.json()["data"]["id"]
+
+        response = await ac.post(
+            f"{FOLDER_DEFAULT_URL}/{folder_id}/items",
+            json={
+                "user_id": str(user_id),
+                "intelligence_id": str(intelligence_id),
+            },
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["code"] == 0
+    assert body["msg"] == "success"
+
+    data = body["data"]
+    assert "id" in data
+    assert data["user_id"] == str(user_id)
+    assert data["target_id"] == str(intelligence_id)
+    assert data["target_type"] == "intelligence"
+    assert data["is_deleted"] is False
