@@ -224,3 +224,66 @@ async def test_add_item_to_folder():
     assert data["target_id"] == str(intelligence_id)
     assert data["target_type"] == "intelligence"
     assert data["is_deleted"] is False
+
+
+@pytest.mark.asyncio
+# 验收：移除后 GET items 无该条；intelligence 不变。
+async def test_remove_item_from_folder():
+    user_id = SEED_ALICE_ID
+    intelligence_id = SEED_INTELLIGENCE_ID
+    folder_name = f"remove-item-router-{uuid.uuid4()}"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        create_resp = await ac.post(
+            FOLDER_DEFAULT_URL,
+            json={"user_id": str(user_id), "name": folder_name},
+        )
+        assert create_resp.status_code == 201
+        folder_id = create_resp.json()["data"]["id"]
+
+        add_resp = await ac.post(
+            f"{FOLDER_DEFAULT_URL}/{folder_id}/items",
+            json={
+                "user_id": str(user_id),
+                "intelligence_id": str(intelligence_id),
+            },
+        )
+        assert add_resp.status_code == 201
+        item_id = add_resp.json()["data"]["id"]
+
+        detail_before = await ac.get(
+            f"{FOLDER_DEFAULT_URL}/{folder_id}",
+            params={"user_id": str(user_id)},
+        )
+        assert detail_before.json()["code"] == 0
+        assert detail_before.json()["data"]["item_count"] == 1
+
+        delete_resp = await ac.delete(
+            f"{FOLDER_DEFAULT_URL}/{folder_id}/items/{item_id}",
+            params={"user_id": str(user_id)},
+        )
+        assert delete_resp.status_code == 200
+        delete_body = delete_resp.json()
+        assert delete_body["code"] == 0
+        assert delete_body["msg"] == "success"
+
+        detail_after = await ac.get(
+            f"{FOLDER_DEFAULT_URL}/{folder_id}",
+            params={"user_id": str(user_id)},
+        )
+        assert detail_after.json()["code"] == 0
+        assert detail_after.json()["data"]["item_count"] == 0
+
+        # GET /items 列表尚未实现，用 item_count + 可重复加入验证 intelligence 未被删除
+        re_add_resp = await ac.post(
+            f"{FOLDER_DEFAULT_URL}/{folder_id}/items",
+            json={
+                "user_id": str(user_id),
+                "intelligence_id": str(intelligence_id),
+            },
+        )
+        assert re_add_resp.status_code == 201
+        assert re_add_resp.json()["code"] == 0
+        assert re_add_resp.json()["data"]["target_id"] == str(intelligence_id)
