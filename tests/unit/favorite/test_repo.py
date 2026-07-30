@@ -15,6 +15,7 @@ from apps.favorite.repositories.folder import (
     favorite_item_soft_delete_by_folder_id,
 )
 from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
+from apps.favorite.repositories.item import favorite_item_create
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
 SEED_BOB_ID = uuid.UUID("fa500001-0002-4000-8000-000000000002")
@@ -214,3 +215,26 @@ async def test_favorite_item_soft_delete_by_folder_id(session: AsyncSession):
 
         assert items[0].folder_id == folder_id
         assert items[0].is_deleted is True
+
+
+@pytest.mark.asyncio
+async def test_favorite_item_create(session: AsyncSession):
+    folder_id = SEED_ALICE_FOLDER_ID
+    user_id = SEED_ALICE_ID
+
+    target_id = uuid.uuid4()
+    target_type = "test-type"
+    new_item = await favorite_item_create(
+        session,
+        folder_id=folder_id,
+        user_id=user_id,
+        target_id=target_id,
+        target_type=target_type,
+    )
+
+    assert new_item.folder_id == folder_id
+    assert new_item.user_id == user_id
+    assert new_item.target_id == target_id
+    assert new_item.target_type == target_type
+    assert new_item.is_deleted is False
+    assert new_item.created_at is not None
