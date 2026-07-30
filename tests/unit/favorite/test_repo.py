@@ -20,6 +20,7 @@ from apps.favorite.repositories.item import (
     favorite_item_find_by_id_and_user,
     favorite_item_find_in_folder,
     favorite_item_soft_delete,
+    favorite_item_list_by_folder,
 )
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
@@ -311,3 +312,120 @@ async def test_favorite_item_soft_delete(session: AsyncSession):
     assert isinstance(deleted_item, GriverFavoriteItem)
     assert deleted_item.id == delete_item.id
     assert deleted_item.is_deleted is True
+
+
+@pytest.mark.asyncio
+async def test_favorite_item_list_by_folder_basic_success(session: AsyncSession):
+    """测试基本查询功能：成功返回 (GriverFavoriteItem, Intelligence) 元组列表和总数"""
+    folder_id = SEED_ALICE_FOLDER_ID
+    page = 1
+    page_size = 10
+    keyword = "  "
+
+    rows, total = await favorite_item_list_by_folder(
+        session, folder_id=folder_id, page=page, page_size=page_size, keyword=keyword
+    )
+
+    assert isinstance(rows, list)
+    assert isinstance(total, int)
+    assert total >= 0
+
+    if rows:
+        for item, intel in rows:
+            assert isinstance(item, GriverFavoriteItem)
+            assert isinstance(intel, Intelligence)
+
+            assert item.folder_id == folder_id
+            assert item.is_deleted is False
+            assert item.target_type == "intelligence"
+            assert item.target_id == intel.id
+
+
+@pytest.mark.asyncio
+async def test_favorite_item_list_by_folder_keyword_filter(session: AsyncSession):
+    """TDD 测试：动态关键词 (ILIKE) 过滤功能"""
+    folder_id = SEED_ALICE_FOLDER_ID
+
+    # 准备带有特殊关键词的测试数据
+    target_kw = f"TDD_TEST_{uuid.uuid4().hex[:8]}"
+
+    intel = Intelligence(
+        id=uuid.uuid4(), user_id=SEED_ALICE_ID, title=f"Important {target_kw} Report"
+    )
+    session.add(intel)
+    await session.flush()
+
+    item = GriverFavoriteItem(
+        id=uuid.uuid4(),
+        user_id=SEED_ALICE_ID,
+        folder_id=folder_id,
+        target_type="intelligence",
+        target_id=intel.id,
+        is_deleted=False,
+    )
+    session.add(item)
+    await session.flush()
+
+    rows, total = await favorite_item_list_by_folder(
+        session, folder_id=folder_id, page=1, page_size=10, keyword=target_kw
+    )
+
+    assert total >= 1
+    matched_titles = [intel_obj.title for _, intel_obj in rows]
+    assert any(target_kw in title for title in matched_titles)
+
+    rows_empty, total_empty = await favorite_item_list_by_folder(
+        session,
+        folder_id=folder_id,
+        page=1,
+        page_size=10,
+        keyword="NON_EXISTENT_KW_999",
+    )
+
+    assert total_empty == 0
+    assert len(rows_empty) == 0
+
+
+@pytest.mark.asyncio
+async def test_favorite_item_list_by_folder_exclude_soft_deleted(session: AsyncSession):
+    """TDD 测试：确保已被软删除 (is_deleted=True) 的收藏项不会被查出"""
+    folder_id = SEED_ALICE_FOLDER_ID
+
+    intel = Intelligence(
+        id=uuid.uuid4(),
+        user_id=SEED_ALICE_ID,
+        title=f"Deleted_Intel_{uuid.uuid4().hex[:6]}",
+    )
+    session.add(intel)
+    await session.flush()
+
+    deleted_item = GriverFavoriteItem(
+        id=uuid.uuid4(),
+        user_id=SEED_ALICE_ID,
+        folder_id=folder_id,
+        target_type="intelligence",
+        target_id=intel.id,
+        is_deleted=True,
+    )
+    session.add(deleted_item)
+    await session.flush()
+
+    rows, _ = await favorite_item_list_by_folder(
+        session, folder_id=folder_id, page=1, page_size=100
+    )
+
+    returned_item_ids = [item.id for item, _ in rows]
+    assert deleted_item.id not in returned_item_ids
+
+
+@pytest.mark.asyncio
+async def test_favorite_item_list_by_folder_pagination_clamp(session: AsyncSession):
+    """TDD 测试：验证分页边界限制（如 page <= 0, page_size > 100 自动修正）"""
+    folder_id = SEED_ALICE_FOLDER_ID
+
+    rows, total = await favorite_item_list_by_folder(
+        session, folder_id=folder_id, page=0, page_size=500
+    )
+
+    assert isinstance(rows, list)
+    assert len(rows) <= 100
