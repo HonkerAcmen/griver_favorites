@@ -11,7 +11,6 @@ from apps.favorite.models import GriverFavoriteFolder, GriverFavoriteItem
 from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
 from apps.favorite.services.folder import FolderService
 
-
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
 SEED_ALICE_FOLDER_ID = uuid.UUID("fa500001-0001-4000-8000-000000000101")
 

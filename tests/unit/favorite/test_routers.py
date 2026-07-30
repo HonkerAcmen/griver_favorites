@@ -5,13 +5,17 @@ from httpx import AsyncClient, ASGITransport
 
 from apps.favorite.schemas.folder import (
     FavoriteFolderListQueryParams,
-    FavoriteFolderUpdateInSchema,
+    FavoriteFolderUpdateInSchema, FavoriteFolderCreateInSchema,
 )
 from main import app
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
 SEED_ALICE_FOLDER_ID = uuid.UUID("fa500001-0001-4000-8000-000000000101")
 
+SEED_BOB_ID = uuid.UUID("fa500001-0002-4000-8000-000000000002")
+SEED_BOB_FOLDER_ID = uuid.UUID("fa500001-0002-4000-8000-000000000101")
+
+FOLDER_DEFAULT_URL = "/grapi/v1/favorite/folders"
 
 @pytest.mark.asyncio
 async def test_create_folder():
@@ -141,3 +145,35 @@ async def test_renamerename_favorite_folder_router():
 
         assert "created_at" in res_data["data"]
         assert "updated_at" in res_data["data"]
+
+
+@pytest.mark.asyncio
+async def test_delete_favorite_folder_router():
+    async with AsyncClient(
+        transport=ASGITransport(app), base_url="http://test"
+    )as ac:
+        create_folder_params = FavoriteFolderCreateInSchema(user_id=SEED_BOB_ID, name="安心上路")
+        create_response = await ac.post(FOLDER_DEFAULT_URL, json=create_folder_params.model_dump(mode="json"))
+
+        assert create_response.status_code == 201
+
+        folder_id = create_response.json()["data"]["id"]
+        user_id = SEED_BOB_ID
+
+        response = await ac.delete(
+            FOLDER_DEFAULT_URL + f"/{folder_id}", params={"user_id": str(user_id)}
+        )
+
+        res_data = response.json()
+        print(res_data)
+        assert res_data["code"] == 0
+        assert res_data["data"] is None
+
+        # 因为service的单元测试已经完成，就不测功能是否成功，只测接口消息体是否正常
+
+        get_response = await ac.get(
+            FOLDER_DEFAULT_URL+f"/{folder_id}",
+            params={"user_id": str(user_id)},
+        )
+        get_data = get_response.json()
+        assert get_data["code"] == 404001

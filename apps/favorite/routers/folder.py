@@ -55,3 +55,14 @@ async def renamerename_favorite_folder(
     )
 
     return success(data=res)
+
+
+@router.delete("/{folder_id}", status_code=status.HTTP_200_OK)
+async def delete_favorite_folder_router(
+    folder_id: Annotated[uuid.UUID, Path(description="文件夹ID")],
+    user_id: Annotated[uuid.UUID, Query(description="用户ID")],
+    service: FolderService = Depends(get_folder_service)
+):
+    await service.delete_favorite_folder(user_id=user_id, folder_id=folder_id)
+    
+    return success(data=None)
