@@ -1,5 +1,6 @@
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.favorite.models import GriverFavoriteItem
@@ -26,8 +27,12 @@ async def favorite_item_create(
 
 async def favorite_item_find_by_id_and_user(
     session: AsyncSession, item_id: uuid.UUID, user_id: uuid.UUID
-):
-    pass
+)->GriverFavoriteItem:
+    smt = select(GriverFavoriteItem).where(
+        GriverFavoriteItem.id == item_id, GriverFavoriteItem.user_id == user_id
+    )
+    result = await session.execute(smt)
+    return result.scalar_one_or_none()
 
 
 async def favorite_item_find_in_folder(

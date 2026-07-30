@@ -15,7 +15,10 @@ from apps.favorite.repositories.folder import (
     favorite_item_soft_delete_by_folder_id,
 )
 from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
-from apps.favorite.repositories.item import favorite_item_create
+from apps.favorite.repositories.item import (
+    favorite_item_create,
+    favorite_item_find_by_id_and_user,
+)
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
 SEED_BOB_ID = uuid.UUID("fa500001-0002-4000-8000-000000000002")
@@ -238,3 +241,17 @@ async def test_favorite_item_create(session: AsyncSession):
     assert new_item.target_type == target_type
     assert new_item.is_deleted is False
     assert new_item.created_at is not None
+
+
+@pytest.mark.asyncio
+async def test_favorite_item_find_by_id_and_user(session: AsyncSession):
+    item_id = uuid.uuid4()
+    user_id = SEED_ALICE_ID
+
+    item = await favorite_item_find_by_id_and_user(session, item_id=item_id, user_id=user_id)
+    if item:
+        assert isinstance(item, GriverFavoriteItem)
+        assert item.id == item_id
+        assert item.user_id == user_id
+
+        assert item.is_deleted is False
