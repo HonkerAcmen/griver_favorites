@@ -127,3 +127,10 @@ async def favorite_folder_update_name(
     folder.updated_at = datetime.datetime.now(timezone.utc)
     await session.flush()
     return folder
+
+async def favorite_folder_soft_delete(session:AsyncSession, folder: GriverFavoriteFolder) -> GriverFavoriteFolder:
+    folder.is_deleted = True
+    folder.updated_at = datetime.datetime.now(timezone.utc)
+
+    await session.flush()
+    return folder

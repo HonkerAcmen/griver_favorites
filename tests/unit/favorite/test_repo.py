@@ -13,6 +13,7 @@ from apps.favorite.repositories.folder import (
     favorite_folder_list_by_user,
     favorite_folder_count_items,
     favorite_folder_update_name,
+    favorite_folder_soft_delete,
 )
 from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
 
@@ -203,3 +204,17 @@ async def test_favorite_folder_update_name_returns_folder(session: AsyncSession)
 
     assert new_folder.id == folder_id
     assert new_folder.name == new_folder_name
+
+@pytest.mark.asyncio
+async def test_favorite_folder_soft_delete(session: AsyncSession):
+    folder_id = SEED_ALICE_FOLDER_ID
+    user_id = SEED_ALICE_ID
+
+    folder = await favorite_folder_find_by_id_and_user(session, folder_id, user_id)
+
+    delete_folder = await favorite_folder_soft_delete(session, folder)
+
+    assert delete_folder.id == folder_id
+    assert delete_folder.name == folder.name
+
+    assert delete_folder.is_deleted is True

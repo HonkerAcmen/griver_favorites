@@ -20,7 +20,6 @@ from apps.favorite.repositories.folder import (
     favorite_folder_update_name,
 )
 from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
-from tests.unit.favorite.test_repo import session
 
 
 class FolderService:
