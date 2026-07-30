@@ -102,3 +102,18 @@ async def test_get_favorite_folder_detail(session: AsyncSession):
 
     assert "created_at" in result
     assert "updated_at" in result
+
+
+@pytest.mark.asyncio
+async def test_rename_favorite_folder(session: AsyncSession):
+    user_id = SEED_ALICE_ID
+    folder_id = SEED_ALICE_FOLDER_ID
+    new_folder_name = str(uuid.uuid4()) + "-service-test"
+
+    service = FolderService(session)
+    new_folder = await service.rename_favorite_folder(user_id, folder_id, name=new_folder_name)
+
+    assert isinstance(new_folder, GriverFavoriteFolder)
+    assert new_folder.id == folder_id
+    assert new_folder.user_id == user_id
+    assert new_folder.name == new_folder_name

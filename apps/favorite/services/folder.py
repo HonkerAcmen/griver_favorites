@@ -9,11 +9,13 @@ from apps.favorite.exceptions import (
     FavoriteFolderNameDuplicateException,
     FavoriteFolderNotFoundException,
 )
+from apps.favorite.models import GriverFavoriteFolder
 from apps.favorite.repositories.folder import (
     favorite_create_folder,
     favorite_folder_list_by_user,
     favorite_folder_find_by_id_and_user,
     favorite_folder_count_items,
+    favorite_folder_update_name,
 )
 from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
 
@@ -83,3 +85,7 @@ class FolderService:
             "created_at": folder.created_at,
             "updated_at": folder.updated_at,
         }
+
+    async def rename_favorite_folder(self, user_id, folder_id, name)->GriverFavoriteFolder:
+        folder = await favorite_folder_find_by_id_and_user(session=self.session, user_id=user_id, folder_id=folder_id)
+        return  await favorite_folder_update_name(session=self.session, folder=folder, new_name=name)
