@@ -1,4 +1,6 @@
+import datetime
 import uuid
+from datetime import timezone
 
 from sqlalchemy import func
 from sqlalchemy import select
@@ -115,3 +117,13 @@ async def favorite_folder_count_items(session, folder_id: uuid.UUID) -> int:
 
     result = await session.execute(smt)
     return result.scalar() or 0
+
+
+async def favorite_folder_update_name(
+    session, folder: GriverFavoriteFolder, new_name: str
+) -> GriverFavoriteFolder:
+    folder.name = new_name
+    
+    folder.updated_at = datetime.datetime.now(timezone.utc)
+    await session.flush()
+    return folder

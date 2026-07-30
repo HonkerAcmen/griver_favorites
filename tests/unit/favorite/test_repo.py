@@ -12,6 +12,7 @@ from apps.favorite.repositories.folder import (
     favorite_folder_count_by_name,
     favorite_folder_list_by_user,
     favorite_folder_count_items,
+    favorite_folder_update_name,
 )
 from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
 
@@ -187,3 +188,18 @@ async def test_favorite_folder_count_items_returns_count(session: AsyncSession):
 
     assert isinstance(result, int)
     assert result >= 0
+
+
+@pytest.mark.asyncio
+async def test_favorite_folder_update_name_returns_folder(session: AsyncSession):
+    folder_id = SEED_ALICE_FOLDER_ID
+    res = await favorite_folder_find_by_id_and_user(session, folder_id, SEED_ALICE_ID)
+
+    new_folder_name = str(uuid.uuid4()) + "-repo-test"
+
+    new_folder = await favorite_folder_update_name(session, res, new_folder_name)
+
+    assert isinstance(new_folder, GriverFavoriteFolder)
+
+    assert new_folder.id == folder_id
+    assert new_folder.name == new_folder_name
