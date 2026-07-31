@@ -2,6 +2,7 @@ import datetime
 import uuid
 from datetime import timezone
 
+from redis.asyncio import Redis
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,17 +17,28 @@ from apps.favorite.repositories.folder import (
     favorite_create_folder,
     favorite_folder_list_by_user,
     favorite_folder_find_by_id_and_user,
-    favorite_folder_count_items,
     favorite_folder_update_name,
     favorite_item_soft_delete_by_folder_id,
     favorite_folder_soft_delete,
 )
 from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
+from apps.favorite.services.cache.folder_cache import (
+    get_folder_detail_cached,
+    invalidate_folder_detail,
+    _load_detail_from_db,
+)
 
 
 class FolderService:
-    def __init__(self, session: AsyncSession):
+    def __init__(
+        self,
+        session: AsyncSession,
+        redis_read: Redis | None = None,
+        redis_write: Redis | None = None,
+    ):
         self.session = session
+        self.redis_read = redis_read
+        self.redis_write = redis_write
 
     async def create_folder(self, user_id: uuid.UUID, name: str) -> dict:
         cleaned = name.strip()
@@ -72,23 +84,17 @@ class FolderService:
     async def get_favorite_folder_detail(
         self, user_id: uuid.UUID, folder_id: uuid.UUID
     ) -> dict:
-
-        folder = await favorite_folder_find_by_id_and_user(
-            self.session, folder_id, user_id
+        if self.redis_read is not None and self.redis_write is not None:
+            return await get_folder_detail_cached(
+                session=self.session,
+                redis_read=self.redis_read,
+                redis_write=self.redis_write,
+                user_id=user_id,
+                folder_id=folder_id,
+            )
+        return await _load_detail_from_db(
+            self.session, folder_id=folder_id, user_id=user_id
         )
-
-        if folder is None:
-            raise FavoriteFolderNotFoundException()
-
-        count = await favorite_folder_count_items(self.session, folder_id)
-
-        return {
-            "id": folder.id,
-            "name": folder.name,
-            "item_count": count,
-            "created_at": folder.created_at,
-            "updated_at": folder.updated_at,
-        }
 
     async def rename_favorite_folder(
         self, user_id: uuid.UUID, folder_id: uuid.UUID, name: str
@@ -113,6 +119,10 @@ class FolderService:
             )
 
         await self.session.commit()
+        if self.redis_write is not None:
+            await invalidate_folder_detail(
+                self.redis_write, user_id=user_id, folder_id=folder_id
+            )
         return new_folder
 
     async def delete_favorite_folder(
@@ -130,4 +140,8 @@ class FolderService:
 
         deleted_folder = await favorite_folder_soft_delete(self.session, folder=folder)
         await self.session.commit()
+        if self.redis_write is not None:
+            await invalidate_folder_detail(
+                self.redis_write, user_id=user_id, folder_id=folder_id
+            )
         return items, deleted_folder

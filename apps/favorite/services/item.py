@@ -1,5 +1,6 @@
 import uuid
 
+from redis.asyncio import Redis
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,11 +21,22 @@ from apps.favorite.repositories.item import (
     favorite_item_list_by_folder,
 )
 from apps.favorite.schemas.item import FavoriteItemListQueryParams
+from apps.favorite.services.cache.folder_cache import (
+    invalidate_folder_detail,
+    invalidate_folder_detail_many,
+)
 
 
 class ItemService:
-    def __init__(self, session: AsyncSession):
+    def __init__(
+        self,
+        session: AsyncSession,
+        redis_read: Redis | None = None,
+        redis_write: Redis | None = None,
+    ):
         self.session = session
+        self.redis_read = redis_read
+        self.redis_write = redis_write
 
     async def add_item_to_folder(
         self, user_id: uuid.UUID, folder_id: uuid.UUID, intelligence_id: uuid.UUID
@@ -55,6 +67,11 @@ class ItemService:
             await self.session.rollback()
             raise FavoriteItemAlreadyExistsException() from e
 
+        if self.redis_write is not None:
+            await invalidate_folder_detail(
+                self.redis_write, user_id=user_id, folder_id=folder_id
+            )
+
         return {
             "id": item.id,
             "user_id": item.user_id,
@@ -73,6 +90,11 @@ class ItemService:
 
         del_item = await favorite_item_soft_delete(self.session, item)
         await self.session.commit()
+
+        if self.redis_write is not None:
+            await invalidate_folder_detail(
+                self.redis_write, user_id=user_id, folder_id=folder_id
+            )
 
         return {
             "user_id": del_item.user_id,
@@ -120,7 +142,8 @@ class ItemService:
         )
         if target_folder_item is not None:
             raise FavoriteItemAlreadyExistsException()
-        # 以上都不成立 则进行移动
+
+        source_folder_id = curr_item.folder_id
         try:
             # 先创建
             new_item = await favorite_item_create(
@@ -138,6 +161,13 @@ class ItemService:
             # 出现唯一性索引错误
             await self.session.rollback()
             raise FavoriteItemAlreadyExistsException() from e
+
+        if self.redis_write is not None:
+            await invalidate_folder_detail_many(
+                self.redis_write,
+                user_id=user_id,
+                folder_ids=[source_folder_id, target_folder_id],
+            )
 
         return {
             "id": new_item.id,

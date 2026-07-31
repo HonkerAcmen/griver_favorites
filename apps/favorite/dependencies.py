@@ -1,18 +1,24 @@
 from fastapi import Depends
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.core.database import get_db_session
+from apps.core.redis import get_redis_read, get_redis_write
 from apps.favorite.services.folder import FolderService
 from apps.favorite.services.item import ItemService
 
 
 async def get_folder_service(
     session: AsyncSession = Depends(get_db_session),
+    redis_read: Redis | None = Depends(get_redis_read),
+    redis_write: Redis | None = Depends(get_redis_write),
 ) -> FolderService:
-    return FolderService(session)
+    return FolderService(session, redis_read=redis_read, redis_write=redis_write)
 
 
 async def get_item_service(
     session: AsyncSession = Depends(get_db_session),
+    redis_read: Redis | None = Depends(get_redis_read),
+    redis_write: Redis | None = Depends(get_redis_write),
 ) -> ItemService:
-    return ItemService(session)
+    return ItemService(session, redis_read=redis_read, redis_write=redis_write)

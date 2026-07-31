@@ -48,9 +48,15 @@ class RedisService:
 redis_service = RedisService()
 
 
-async def get_redis_write() -> Redis:
-    return redis_service.write_client
+async def get_redis_write() -> Redis | None:
+    try:
+        return redis_service.write_client
+    except RuntimeError:
+        return None
 
 
-async def get_redis_read() -> Redis:
-    return redis_service.read_client
+async def get_redis_read() -> Redis | None:
+    try:
+        return redis_service.read_client
+    except RuntimeError:
+        return None
