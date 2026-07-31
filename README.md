@@ -1,42 +1,51 @@
 # griver_favorites
 
-GoldRiver 收藏夹（Favorite）独立模块。用户可创建、搜索、重命名与软删除收藏夹；收藏项（`favorite_item`）表结构已预留，添加/移除/移动等能力在后续迭代实现。
+GoldRiver 情报收藏夹（Favorite）独立服务。支持收藏夹 CRUD、情报加入/移除/移动、分页筛选，以及收藏夹详情 Redis 缓存与 RabbitMQ 操作日志。
 
-架构参考 DogeX GoldRiver 分层规范：**Router → Service → Repository**。
+架构：**Router → Service → Repository**，参考 [DogeX GoldRiver](https://github.com/biteying/back_dogex_griver) 分层规范。
+
+## 当前进度
+
+| 模块 | 状态 |
+|------|------|
+| 9 个 HTTP API | ✓ |
+| 业务规则 R1–R10 | ✓ |
+| Redis Cache-Aside（详情 + item_count） | ✓ |
+| RabbitMQ 收藏事件 + Consumer 落库 | ✓ |
+| 自动化测试 | **101 passed**（`pytest tests/ -q`） |
 
 ## 文档
 
 | 文档 | 说明 |
 |------|------|
-| [docs/design.md](docs/design.md) | 设计文档 v1.2（数据模型、分层、错误码、RabbitMQ 预留） |
+| [docs/design.md](docs/design.md) | 数据模型、分层、缓存/MQ、测试设计 |
 | [docs/api.md](docs/api.md) | API 清单，路由前缀 `/grapi/v1/favorite` |
+| [docs/requirements.md](docs/requirements.md) | 需求、验收清单、进度 |
 
 ## 技术栈
 
 - Python 3.14+
 - [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn
-- [SQLAlchemy 2](https://docs.sqlalchemy.org/) + [Alembic](https://alembic.sqlalchemy.org/)
-- PostgreSQL（驱动：psycopg 3）
-- pytest + httpx（测试）
+- [SQLAlchemy 2](https://docs.sqlalchemy.org/) async + [Alembic](https://alembic.sqlalchemy.org/)
+- PostgreSQL（asyncpg / psycopg 3）
+- Redis 5（Cache-Aside）
+- RabbitMQ + [aio-pika](https://aio-pika.readthedocs.io/)（收藏操作日志）
+- pytest + httpx
 
 ## 项目结构
 
 ```
 griver_favorites/
-├── main.py                 # FastAPI 入口（当前为占位 health 接口）
-├── test_main.py            # 基础 API 测试
-├── alembic.ini             # Alembic 配置
-├── migrations/             # 数据库迁移
-│   ├── env.py              # 从 .env 读取 DATABASE_URL_SYNC
-│   └── versions/
-│       ├── 000_create_user.py
-│       └── 001_favorite_folder.py
-├── scripts/db/             # 参考 SQL（schema 快照、种子数据）
-│   ├── 001_favorite_schema.sql
-│   ├── 002_users_seed.sql
-│   ├── 003_intelligence_seed.sql
-│   └── 004_favorite_seed.sql
-├── docs/                   # 设计与 API 文档
+├── main.py                      # FastAPI 入口（lifespan 初始化 Redis / RabbitMQ）
+├── docker-compose.yml           # PostgreSQL + Redis + RabbitMQ
+├── alembic.ini
+├── migrations/versions/         # 000–004
+├── apps/
+│   ├── core/                    # config, database, redis, rabbitmq
+│   └── favorite/                # routers, services, repositories, mq
+├── scripts/db/                  # 种子 SQL
+├── tests/                       # unit + integration
+├── docs/
 ├── requirements.txt
 └── requirements-dev.txt
 ```
@@ -46,127 +55,139 @@ griver_favorites/
 ### 1. 环境要求
 
 - Python 3.14+
-- 本地 PostgreSQL（默认 `localhost:5432`）
+- Docker（推荐，用于 PostgreSQL / Redis / RabbitMQ）
+- 或自行安装上述三个服务
 
-### 2. 安装依赖
+### 2. 启动基础设施（Docker）
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| PostgreSQL | 5432 | 用户 `postgres` / 密码 `password`，库 `griver_favorites` |
+| Redis | 6379 | 无密码 |
+| RabbitMQ | 5672 / 15672 | 管理台 `guest` / `guest`，<http://localhost:15672> |
+
+### 3. 安装 Python 依赖
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 ```
 
-### 3. 配置环境变量
-
-在项目根目录创建 `.env`：
-
-```env
-DATABASE_URL_SYNC=postgresql+psycopg://postgres:postgres@localhost:5432/griver_favorites
-```
-
-按实际 PostgreSQL 账号、密码、主机修改连接串。
-
-### 4. 创建数据库
-
-Alembic 不会自动建库，需先创建目标数据库：
+### 4. 配置环境变量
 
 ```bash
-# 方式一：psql
-psql -h localhost -U postgres -d postgres -c "CREATE DATABASE griver_favorites;"
-
-# 方式二：Python（需已配置 .env）
-python -c "
-from dotenv import load_dotenv; load_dotenv()
-import os
-from sqlalchemy import create_engine, text
-url = os.environ['DATABASE_URL_SYNC'].rsplit('/', 1)[0] + '/postgres'
-with create_engine(url, isolation_level='AUTOCOMMIT').connect() as c:
-    if not c.execute(text(\"SELECT 1 FROM pg_database WHERE datname='griver_favorites'\")).scalar():
-        c.execute(text('CREATE DATABASE griver_favorites'))
-        print('created')
-"
+cp .env.example .env
 ```
 
-### 5. 执行迁移
+默认连接串已与 `docker-compose.yml` 对齐；若使用自建数据库，请修改 `.env` 中对应项。
 
-**必须在项目根目录运行**（不要在 `migrations/` 子目录下）：
+### 5. 数据库迁移
+
+`docker compose` 首次启动时会自动创建 `griver_favorites` 库，直接执行迁移即可：
 
 ```bash
 alembic upgrade head
-alembic current   # 期望输出：001_favorite_folder (head)
+alembic current    # 期望：004_favorite_operation_log (head)
 ```
 
-迁移完成后将存在表：`users`、`griver_favorite_folder`、`griver_favorite_item`。
+### 6. 种子数据（可选，测试/联调推荐）
 
-### 6. 启动服务
+```bash
+psql "$DATABASE_URL_SYNC" -f scripts/db/002_users_seed.sql
+psql "$DATABASE_URL_SYNC" -f scripts/db/003_intelligence_seed.sql
+psql "$DATABASE_URL_SYNC" -f scripts/db/004_favorite_seed.sql
+```
+
+数据量：5 用户、80 情报、15 收藏夹、105 收藏项。
+
+### 7. 启动应用
+
+**终端 1 — HTTP 服务：**
 
 ```bash
 uvicorn main:app --reload
 ```
 
 - 健康检查：<http://127.0.0.1:8000/health>
-- OpenAPI 文档：<http://127.0.0.1:8000/docs>
+- OpenAPI：<http://127.0.0.1:8000/docs>
 
-### 7. 运行测试
+**终端 2 — MQ Consumer（收藏操作日志）：**
 
 ```bash
-pytest
+python -m apps.favorite.mq.consumer
 ```
+
+收藏成功后，Publisher 发消息到 `favorite.events`；Consumer 写入 `favorite_operation_log` 表。
+
+### 8. 运行测试
+
+```bash
+pytest tests/ -q
+```
+
+MQ 集成测（`tests/integration/favorite/test_mq_favorite_add.py`）需要 RabbitMQ 运行；不可用时自动 skip。
+
+生成可复现结果文件：
+
+```bash
+pytest tests/ --tb=short 2>&1 | tee test_results.txt
+```
+
+## 功能范围
+
+| 功能 | 说明 |
+|------|------|
+| 收藏夹 CRUD | 创建 / 列表 / 搜索 / 详情 / 重命名 / 软删 |
+| 收藏项 | 加入 / 移除 / 移动 / 分页列表 / 标题筛选 |
+| Redis | GET 详情 Cache-Aside；写操作后失效 |
+| RabbitMQ | 加入收藏 commit 后发事件；Consumer 幂等落库 |
 
 ## 数据库
 
 ### 迁移版本链
 
 ```
-base → 000_create_user → 001_favorite_folder (head)
+base → 000_create_user → 001_favorite_folder → 002_favorite_folder
+     → 003_intelligence → 004_favorite_operation_log (head)
 ```
 
 | 表 | 说明 |
 |----|------|
-| `users` | 用户表（本地开发 / 联调） |
-| `griver_favorite_folder` | 收藏夹；`(user_id, name)` 在未删除记录上部分唯一 |
-| `griver_favorite_item` | 收藏项（表已建，业务 API 后续实现） |
+| `users` | 用户 |
+| `intelligence` | 情报（只读引用） |
+| `griver_favorite_folder` | 收藏夹 |
+| `griver_favorite_item` | 收藏关系 |
+| `favorite_operation_log` | MQ 消费操作日志（`event_id` UNIQUE 幂等） |
 
 ### Alembic 常用命令
 
 ```bash
-alembic upgrade head          # 升级到最新
-alembic upgrade +1            # 升级一个版本
-alembic downgrade -1          # 回退一个版本
-alembic current               # 查看当前版本
-alembic history -v            # 查看迁移历史
-alembic revision -m "描述"    # 新建空 migration
+alembic upgrade head
+alembic downgrade -1
+alembic current
+alembic history -v
 ```
 
-当前 `migrations/env.py` 中 `target_metadata = None`，未启用 `--autogenerate`；迁移文件以手写为主。
+## 排查
 
-### 种子数据（可选）
-
-按顺序执行 seed（可重复运行）：
-
-```bash
-# 需先 alembic upgrade head；将连接串换成你的 DATABASE_URL_SYNC
-psql "$DATABASE_URL_SYNC" -f scripts/db/002_users_seed.sql
-psql "$DATABASE_URL_SYNC" -f scripts/db/003_intelligence_seed.sql
-psql "$DATABASE_URL_SYNC" -f scripts/db/004_favorite_seed.sql
-```
-
-数据量：5 用户、80 情报、15 收藏夹、105 收藏项。`target_type` 均为 `intelligence`；同一情报可出现在不同收藏夹。
-
-## 本期功能范围
-
-| 功能 | 状态 |
+| 现象 | 处理 |
 |------|------|
-| 收藏夹 CRUD（创建 / 列表 / 搜索 / 详情 / 重命名 / 软删） | 设计中，待实现 |
-| 收藏项添加 / 移除 / 移动 | 否，表结构已预留 |
-| Redis 缓存 | 否 |
-| RabbitMQ 事件 | 否，见 design.md §13 |
+| `alembic` ImportError / `_BindParamClause` | venv 中重装官方包：`pip uninstall -y uliweb-alembic alembic && pip install 'alembic>=1.14,<2'` |
+| `redis.exceptions` 找不到 | `pip install --force-reinstall 'redis>=5.2,<6'` |
+| uvicorn 启动失败（连不上 RabbitMQ） | 先 `docker compose up -d`，或确保 `.env` 中 `RABBITMQ_URL` 正确 |
+| MQ 集成测 skip | 本地需运行 RabbitMQ（`docker compose up -d`） |
 
 ## 开发说明
 
-- 业务代码将放在 `apps/favorite/`（Router / Service / Repository），与 GoldRiver 宿主对齐后接入鉴权 `request_init(verify=True)`。
-- API 错误码与响应格式见 [docs/api.md](docs/api.md)；数值 `code` 实现阶段向 GoldRiver 错误码段申请。
-- `.env` 已加入 `.gitignore`，勿提交真实凭据。
+- 业务代码在 `apps/favorite/`（Router / Service / Repository / mq）
+- 统一响应与错误码见 [docs/api.md](docs/api.md)
+- `.env` 已加入 `.gitignore`，勿提交真实凭据
 
 ## License
 
