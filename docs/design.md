@@ -2,9 +2,9 @@
 
 > **项目**：griver_favorites  
 > **架构参考**：Router → Service → Repository 分层  
-> **版本**：v3.0  
-> **日期**：2026-07-29  
-> **状态**：对齐**完整作业**（含 Redis Cache-Aside + RabbitMQ 操作日志 + Docker Compose）
+> **版本**：v3.1  
+> **日期**：2026-07-31  
+> **状态**：**已实现**（9 API + Redis Cache-Aside + RabbitMQ 操作日志 + Docker Compose；**101 passed**）
 
 **关联文档**：[api.md](./api.md)（接口清单，错误码与本文档 §8 保持一致）
 
@@ -420,17 +420,20 @@ apps/core/
 
 migrations/versions/
 scripts/db/
-docker-compose.yml              # app + postgres + redis + rabbitmq
+docker-compose.yml              # postgres + redis + rabbitmq（app 本机运行）
 tests/
 ├── unit/favorite/
-│   ├── test_folder_service.py
-│   ├── test_item_service.py
-│   └── test_folder_cache.py
+│   ├── test_folder_service.py      # 14
+│   ├── test_item_service.py        # 14（含 MQ publish）
+│   ├── test_folder_cache.py        # 8
+│   ├── test_mq_publisher.py        # 3
+│   ├── test_mq_consumer.py         # 8
+│   ├── test_repo.py                # 23
+│   └── test_routers.py             # 8
 └── integration/favorite/
-    ├── test_folder_router.py
-    ├── test_item_router.py
-    ├── test_concurrency.py
-    └── test_mq_favorite_add.py
+    ├── test_folder_router.py       # 10
+    ├── test_item_router.py         # 8（含并发 R9）
+    └── test_mq_favorite_add.py     # 5
 ```
 
 ---
@@ -444,23 +447,43 @@ Depends(get_db_session)          # 注意：不加括号
   → Repository：SQL/ORM，接收 session，不 commit
 ```
 
-### 6.1 Repository 函数（与代码一致）
+### 6.1 Repository 函数（与代码一致，均已实现）
 
-| 模块 | 已实现 | 待实现 |
-|------|--------|--------|
-| folder | `favorite_create_folder`、`favorite_folder_find_by_id_and_user`、`favorite_folder_count_by_name`、`favorite_folder_list_by_user` | `favorite_folder_update_name`、`favorite_folder_soft_delete`、`favorite_folder_count_items`、`favorite_item_soft_delete_by_folder_id` |
-| item | — | `favorite_item_create`、`favorite_item_find_by_id_and_user`、`favorite_item_find_in_folder`、`favorite_item_soft_delete`、`favorite_item_list_by_folder` |
-| intelligence | `intelligence_find_by_id_not_deleted` → `Intelligence \| None` | — |
-
-### 6.2 Service 函数
-
-| 模块 | 状态 | 函数 |
+| 模块 | 函数 | 说明 |
 |------|------|------|
-| folder | 壳 | `create_folder`（**当前 `pass`，B2 待实现**） |
-| folder | 未做 | `list_favorite_folders`、`get_favorite_folder_detail`、`rename_favorite_folder`、`delete_favorite_folder` |
-| item | 未做 | `add_item_to_folder`、`remove_item_from_folder`、`move_item`、`list_items_in_folder` |
+| folder | `favorite_create_folder` | 创建 |
+| folder | `favorite_folder_find_by_id_and_user` | 按 id + user 查有效 folder |
+| folder | `favorite_folder_count_by_name` | R1 重名校验 |
+| folder | `favorite_folder_list_by_user` | 分页 + keyword |
+| folder | `favorite_folder_count_items` | 详情 item_count |
+| folder | `favorite_folder_update_name` | 重命名 |
+| folder | `favorite_folder_soft_delete` | 软删 folder |
+| folder | `favorite_item_soft_delete_by_folder_id` | R8 级联软删 item |
+| item | `favorite_item_create` | 创建收藏关系 |
+| item | `favorite_item_find_by_id_and_user` | 按 item id 查 |
+| item | `favorite_item_find_in_folder` | R5/R6 移动校验 |
+| item | `favorite_item_soft_delete` | 移除 |
+| item | `favorite_item_list_by_folder` | 分页 + title keyword（JOIN intelligence） |
+| intelligence | `intelligence_find_by_id_not_deleted` | R4 只读校验 |
+| operation_log | `operation_log_create`、`operation_log_exists_by_event_id` | MQ 消费落库 + 幂等 |
 
-移动：`move_item` 内开启事务，校验 R5/R6，写操作一次 commit；**commit 后**失效来源与目标 folder 缓存。
+### 6.2 Service 函数（均已实现）
+
+| 模块 | 函数 | 说明 |
+|------|------|------|
+| folder | `create_folder` | R1；IntegrityError → DUPLICATE |
+| folder | `list_favorite_folders` | 分页 + keyword |
+| folder | `get_favorite_folder_detail` | 走 `get_folder_detail_cached`（Cache-Aside） |
+| folder | `rename_favorite_folder` | 写后 `invalidate_folder_detail` |
+| folder | `delete_favorite_folder` | R8 级联 + 缓存失效 |
+| item | `add_item_to_folder` | R2/R4；commit 后 `publish_favorite_added` + 缓存失效 |
+| item | `remove_item_from_folder` | 软删 + 缓存失效 |
+| item | `move_item` | R5/R6/R7 单事务；双端缓存失效 |
+| item | `list_items_in_folder` | 分页 + title keyword |
+| cache | `get_folder_detail_cached` | 命中/未命中/空值 TTL/读降级 |
+| cache | `invalidate_folder_detail` / `invalidate_folder_detail_many` | 写后失效 |
+
+移动：`move_item` 内单事务 create + soft_delete，一次 commit；**commit 后**失效来源与目标 folder 缓存。
 
 ### 6.4 Redis 缓存（Cache-Aside）
 
@@ -633,6 +656,8 @@ Depends(get_db_session)          # 注意：不加括号
 | Router 测试 | `dependency_overrides` mock Service |
 | 数据隔离 | 每用例独立 user_id 或固定 id 段清理后 seed |
 
+**实现映射（2026-07-31）**：`pytest tests/ -q` → **101 passed**。§10.2 用例 19–31 → `test_item_service` + `test_item_router`；§10.3 用例 32–37 → `test_folder_cache`；§10.4 用例 38–42 → `test_mq_publisher` + `test_item_service` + `test_mq_consumer` + `test_mq_favorite_add`。
+
 ---
 
 ## 11. 测试数据初始化
@@ -654,17 +679,26 @@ Depends(get_db_session)          # 注意：不加括号
 ## 12. Docker Compose 与本地依赖
 
 ```yaml
-# docker-compose.yml 最少包含：
+# docker-compose.yml 包含（app 不在容器内，本机 uvicorn 启动）：
 services:
   postgres:    # 5432
   redis:       # 6379
-  rabbitmq:    # 5672, management 15672 可选
-  app:         # uvicorn，依赖上述服务 healthy
+  rabbitmq:    # 5672, management 15672
 ```
 
 环境变量见 `.env.example`：`DATABASE_URL`、`REDIS_READ_URL`、`REDIS_WRITE_URL`、`RABBITMQ_URL`。
 
-Consumer 可独立进程 `python -m apps.favorite.mq.consumer`，或 FastAPI lifespan 后台 task（README 须说明）。
+**启动顺序**：
+
+```bash
+docker compose up -d
+cp .env.example .env
+alembic upgrade head          # 000–004
+uvicorn main:app --reload     # HTTP API（lifespan 初始化 Redis / RabbitMQ）
+python -m apps.favorite.mq.consumer   # 独立 Consumer 进程
+```
+
+Consumer 须单独进程运行（见 README）；Publisher 在 `ItemService.add_item_to_folder` commit 成功后异步发送。
 
 ---
 
@@ -682,6 +716,7 @@ Consumer 可独立进程 `python -m apps.favorite.mq.consumer`，或 FastAPI lif
 
 | 日期 | 议题 | 结论 |
 |------|------|------|
+| 2026-07-31 | v3.1 实现终版 | 全量 API/Redis/MQ 已实现；101 passed；docker-compose 仅基础设施 |
 | 2026-07-29 | v3.0 范围修正 | **纳入 Redis + RabbitMQ + Docker**；v2.0 错误排除已作废 |
 | 2026-07-28 | v2.0 范围 | 完整 folder + item（曾错误排除 MQ/Redis） |
 | 2026-07-28 | 去重维度 | folder 级唯一，允许跨 folder 重复同一情报 |
@@ -689,7 +724,22 @@ Consumer 可独立进程 `python -m apps.favorite.mq.consumer`，或 FastAPI lif
 | 2026-07-28 | 移动 | 单事务；R5/R6 校验 |
 | 2026-07-28 | 删 folder | 级联 item，不删 intelligence |
 
-**评审状态**：v3.0 已定稿（完整作业范围）
+**评审状态**：v3.1 已实现并对齐代码（完整作业范围）
+
+---
+
+## 15. 实现状态摘要
+
+| 能力 | 状态 | 关键路径 |
+|------|------|----------|
+| 9 HTTP API | ✓ | `routers/folder.py`、`routers/item.py` |
+| R1–R10 | ✓ | Service + DB 约束 |
+| Redis Cache-Aside | ✓ | `folder_cache.py`；key `folder:detail:{user_id}:{folder_id}` |
+| RabbitMQ 操作日志 | ✓ | `mq/publisher.py`、`mq/consumer.py`；migration 004 |
+| Docker Compose | ✓ | PG + Redis + RabbitMQ |
+| 自动化测试 | ✓ | 101 passed（`test_results.txt`） |
+
+可选增强（非阻塞）：`/health` 探针、N+1 专项测、main.py MQ 优雅降级 — 见 requirements §3.2。
 
 ---
 
@@ -697,7 +747,8 @@ Consumer 可独立进程 `python -m apps.favorite.mq.consumer`，或 FastAPI lif
 
 | 版本 | 日期 | 变更摘要 |
 |------|------|----------|
-| v3.0 | 2026-07-29 | Redis/MQ/Docker；§6.1–6.2 **对齐实际代码函数名与完成状态** |
+| v3.1 | 2026-07-31 | §6.1/6.2 全量实现；§10.5 测试映射；§12 Docker 无 app 容器；§15 实现状态 |
+| v3.0 | 2026-07-29 | Redis/MQ/Docker 纳入范围；§6.1–6.2 对齐代码函数名 |
 | v1.0 | 2026-07-27 | 初版 folder CRUD |
 | v1.1 | 2026-07-28 | ER、错误码、HTTP 约定 |
 | v1.2 | 2026-07-28 | RabbitMQ 模型草案 |
