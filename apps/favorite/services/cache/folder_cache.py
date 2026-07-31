@@ -52,7 +52,7 @@ async def get_folder_detail_cached(
     try:
         raw = await redis_read.get(key)
     except Exception as e:
-        logger.warning(f"[Redis Read Error]: Failed to get key {key}", e)
+        logger.warning("[Redis Read Error]: Failed to get key %s: %s", key, e)
 
     if raw is not None:
         dto = FolderDetailCacheDTO.from_json(raw)
@@ -73,7 +73,7 @@ async def get_folder_detail_cached(
             )
         except Exception as e:
             logger.error(
-                f"[Redis Write Error]: Failed to wirte sentinel for {key} :", e
+                "[Redis Write Error]: Failed to write sentinel for %s: %s", key, e
             )
 
         raise
@@ -84,7 +84,7 @@ async def get_folder_detail_cached(
     try:
         await redis_write.setex(key, FOLDER_DETAIL_CACHE_TTL_SECONDS, dto.to_json())
     except Exception as e:
-        logger.error(f"[Redis Write error]: Failed to write setex key  for {key} :", e)
+        logger.error("[Redis Write Error]: Failed to write setex for %s: %s", key, e)
 
     return data
 
@@ -96,7 +96,7 @@ async def invalidate_folder_detail(
     try:
         await redis_write.delete(key)
     except Exception as e:
-        logger.error(f"[Redis Delete Error]: Failed to delete key {key}", e)
+        logger.error("[Redis Delete Error]: Failed to delete key %s: %s", key, e)
 
 
 async def invalidate_folder_detail_many(
@@ -112,4 +112,4 @@ async def invalidate_folder_detail_many(
     try:
         await redis_write.delete(*keys)
     except Exception as e:
-        logger.error(f"[Redis Delete Error]: Failed to delete keys for {keys}:", e)
+        logger.error("[Redis Delete Error]: Failed to delete keys %s: %s", keys, e)
