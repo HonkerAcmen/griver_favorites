@@ -7,19 +7,17 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from apps.core.exception_handlers import register_exception_handlers
+from apps.core.rabbitmq import rabbitmq_service
 from apps.core.redis import redis_service
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await redis_service.init_redis()
-    logging.log(logging.INFO, "[Lifespan] Redis initialized")
-
+    await rabbitmq_service.init_rabbitmq()   # 新增
     yield
-
-    logging.log(logging.INFO, "[Lifespan] Redis closed")
+    await rabbitmq_service.close()
     await redis_service.close()
-
 
 
 logging.basicConfig(level=logging.INFO)
