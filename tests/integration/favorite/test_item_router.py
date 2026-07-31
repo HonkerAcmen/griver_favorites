@@ -1,5 +1,6 @@
 """Item Router 集成测试：AsyncClient + 真实 DB + seed。"""
 
+import asyncio
 import uuid
 
 import pytest
@@ -208,3 +209,60 @@ async def test_list_items_keyword_hit_and_miss():
         miss = await _list_items(client, folder_id, keyword="NO_SUCH_TITLE_XYZ")
         assert miss["total"] == 0
         assert miss["items"] == []
+
+
+# ----- 并发测试 添加item Start ------
+async def _add_once_item(
+    client: AsyncClient,
+    folder_id: str,
+    user_id: uuid.UUID,
+    intelligence_id: uuid.UUID,
+):
+
+    return await client.post(
+        ITEMS_URL.format(folder_id=folder_id),
+        json={
+            "user_id": str(user_id),
+            "intelligence_id": str(intelligence_id),
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_add_same_intelligence_same_folder():
+
+    N = 20
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        folder_id = await _create_folder(client)
+        task = [
+            _add_once_item(
+                client,
+                folder_id=folder_id,
+                user_id=SEED_ALICE_ID,
+                intelligence_id=SEED_INTELLIGENCE_ID,
+            )
+            for _ in range(N)
+        ]
+
+        responses = await asyncio.gather(*task)
+
+        success = [
+            r for r in responses if r.status_code == 201 and r.json()["code"] == 0
+        ]
+
+        duplicates = [
+            r
+            for r in responses
+            if r.json().get("msg") == "FAVORITE_ITEM_ALREADY_EXISTS"
+        ]
+
+        assert len(success) == 1
+        assert len(duplicates) == N - 1
+
+        listed = await _list_items(client, folder_id)
+        assert listed["total"] == 1
+
+
+# # ----- 并发测试 添加item End ------
