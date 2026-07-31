@@ -22,6 +22,7 @@ from apps.favorite.repositories.item import (
     favorite_item_soft_delete,
     favorite_item_list_by_folder,
 )
+from apps.favorite.repositories.operation_log import operation_log_create
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
 SEED_BOB_ID = uuid.UUID("fa500001-0002-4000-8000-000000000002")
@@ -429,3 +430,58 @@ async def test_favorite_item_list_by_folder_pagination_clamp(session: AsyncSessi
 
     assert isinstance(rows, list)
     assert len(rows) <= 100
+
+
+# test_operation_log_create_success 插入后 DB 有行，字段正确
+@pytest.mark.asyncio
+async def test_operation_log_create_success(session: AsyncSession):
+    event_id = uuid.uuid4()
+    user_id = SEED_ALICE_ID
+    folder_id = SEED_ALICE_FOLDER_ID
+    intelligence_id = SEED_INTELLIGENCE_ID
+    action = "repo-test"
+
+    row = await operation_log_create(
+        session,
+        event_id=event_id,
+        user_id=user_id,
+        folder_id=folder_id,
+        intelligence_id=intelligence_id,
+        action=action,
+    )
+
+    assert row.event_id == event_id
+    assert row.user_id == user_id
+    assert row.folder_id == folder_id
+    assert row.intelligence_id == intelligence_id
+
+
+# test_operation_log_duplicate_event_id_raises 同一 event_id 插两次 → IntegrityError
+@pytest.mark.asyncio
+async def test_operation_log_duplicate_event_id_raises(session: AsyncSession):
+    event_id = uuid.uuid4()
+    user_id = SEED_ALICE_ID
+    folder_id = SEED_ALICE_FOLDER_ID
+    intelligence_id = SEED_INTELLIGENCE_ID
+    action = "repo-test"
+
+    await operation_log_create(
+        session,
+        event_id=event_id,
+        user_id=user_id,
+        folder_id=folder_id,
+        intelligence_id=intelligence_id,
+        action=action,
+    )
+
+    from sqlalchemy.exc import IntegrityError
+
+    with pytest.raises(IntegrityError):
+        await operation_log_create(
+            session,
+            event_id=event_id,
+            user_id=user_id,
+            folder_id=folder_id,
+            intelligence_id=intelligence_id,
+            action=action,
+        )

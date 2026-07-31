@@ -3,11 +3,11 @@
 | 字段 | 内容 |
 |------|------|
 | **文档类型** | 需求说明 + 可执行开发计划（文件级 / 行为级） |
-| **版本** | v2.3 |
-| **编制日期** | 2026-07-29（v2.2）；**进度刷新 2026-07-31** |
+| **版本** | v2.4 |
+| **编制日期** | 2026-07-29（v2.2）；**进度刷新 2026-07-31 17:45** |
 | **计划周期** | 2026-07-29（周三，自 B2 起）— 2026-07-31（周五）23:00 |
 | **交付范围** | 9 HTTP 接口、业务规则 R1–R10、Redis Cache-Aside、RabbitMQ 操作日志、Docker Compose、全量自动化测试 |
-| **当前工作项** | **G**：Redis Cache-Aside 业务接入（`folder_cache.py` + 写后失效 + 单测） |
+| **当前工作项** | **H / I / J**：RabbitMQ 操作日志、Docker Compose、README 与交付收尾 |
 | **关联文档** | [design.md](./design.md) v3.0、[api.md](./api.md) v2.0 |
 
 ---
@@ -285,9 +285,12 @@ favorite_operation_log
 | `tests/unit/favorite/test_repo.py` | 21 | folder + item repo |
 | `tests/unit/favorite/test_folder_service.py` | 14 | folder service（含 A8） |
 | `tests/unit/favorite/test_item_service.py` | 12 | design §10.2 #19–27 |
-| `tests/unit/favorite/test_routers.py` | 8 | 各 Router HTTP 形态（含 move + 列表） |
+| `tests/unit/favorite/test_folder_cache.py` | 8 | Redis Cache-Aside §7.2 六条 + 空列表边界 |
+| `tests/unit/favorite/test_routers.py` | 8 | 各 Router HTTP 形态（含 move 失败回滚验证 + 列表） |
 | `tests/integration/favorite/test_folder_router.py` | 10 | folder 集成 §10.1 |
-| `tests/integration/favorite/test_item_router.py` | 8 | item 集成 F4 + **F5 并发 R9**（`test_concurrent_add_same_intelligence_same_folder`） |
+| `tests/integration/favorite/test_item_router.py` | 8 | item 集成 F4 + **F5 并发 R9** |
+
+**合计**：`pytest tests/ -q` → **81 passed**（2026-07-31 17:45 本地 venv 复现）。
 
 #### 3.1.4 常用 seed UUID（不变）
 
@@ -303,28 +306,152 @@ favorite_operation_log
 |------|------|------|
 | 周三晚 | B2–C3 | ✓ |
 | 周四 | A6–A8、B5–B8、C2、C4；C5 部分（`.env.example` ✓） | ✓ |
-| 周五 | F1–F5 | ✓ |
-| 周五 | G（Redis 基建：客户端 + lifespan） | **部分** |
+| 周五 | F1–F5（9 API + Item 全系 + 并发 R9） | ✓ |
+| 周五 | **G**（Redis Cache-Aside：键/DTO、folder_cache、Service 接入、写后失效、单测） | ✓ |
 | 周五 | H（RabbitMQ）、I（Docker）、J/K（交付收尾） | ✗ |
+
+#### 3.1.6 Redis 实现摘要（G 已完成）
+
+| 模块 | 状态 |
+|------|------|
+| `apps/core/redis.py` + `main.py` lifespan | ✓ 读写分离客户端；未初始化时 Depends 返回 `None` |
+| `cache_keys.py` / `schemas/cache.py` | ✓ |
+| `services/cache/folder_cache.py` | ✓ 读路径 + invalidate 单/双 key |
+| `FolderService.get_favorite_folder_detail` | ✓ 有 Redis 走缓存，无 Redis 降级 DB |
+| `FolderService` rename/delete 后失效 | ✓ |
+| `ItemService` add/remove/move 后失效 | ✓ move 双 key |
+| `test_folder_cache.py` | ✓ 8 条 |
+| `requirements.txt` 声明 `redis>=5.2,<6` | ✓ |
 
 ### 3.2 未完成（审查前必须对齐预期）
 
 | 项 | 现状 | 影响 |
 |----|------|------|
-| Redis Cache-Aside **业务层** | `apps/core/redis.py` + `main.py` lifespan 已有；**未**接 `get_favorite_folder_detail` | §5.2 未满足；详情仍直连 DB |
-| Redis 写后失效 | rename/delete/add/remove/move 均未 `delete` cache key | 缓存即使接入也会脏读 |
-| `test_folder_cache.py` | 未建 | §7.2 六条未覆盖 |
-| RabbitMQ 全系 | 无 migration 004、无 publisher/consumer | §5.3 未满足 |
-| `docker-compose.yml` | 无 | §5.4 未满足 |
-| README 启动说明 | 未更新 Redis/MQ/compose | 审查第一印象 |
-| `requirements.txt` 中 `redis` | 仍注释（venv 或已手动安装） | 他人 clone 后可能缺依赖 |
-| `main.py` logging | 默认 WARNING，lifespan INFO 不可见 | 演示 Redis 初始化不直观 |
-| `003_intelligence_seed.sql` CREATE TABLE | 仍未清理 | 低优先级 |
+| **RabbitMQ 全系（任务 H / 入项任务 6）** | 无 migration 004、无 `mq/publisher.py`、无 `mq/consumer.py`、无 `operation_log` repo、无 MQ 集成测 | §5.3 全未满足；入项交付物缺 MQ |
+| **`docker-compose.yml`（任务 I）** | 不存在 | §5.4、入项交付物 §十.8 未满足 |
+| **README** | 仍写「收藏项/Redis/MQ 未实现」 | 审查第一印象差；与代码不符 |
+| **`test_results.txt`** | 未提交可复现测试输出文件 | 入项交付物 §十.9 |
+| **N+1 / 懒加载专项测** | 列表实现用 JOIN，但无独立断言用例 | 入项测试要求 §八.9 未显式覆盖 |
+| **移动中途失败事务回滚专项 Service 单测** | Router 层有「目标已存在则两边列表不变」；无 mock IntegrityError 的 Service 级回滚单测 | §八.6 部分覆盖 |
+| **Redis 集成测（真 Redis）** | 仅 mock 单测；集成测 AsyncClient 不触发 lifespan | 手动演示需 `uvicorn` + Redis |
+| **`/health` 含 Redis 状态** | 仅 `{"status":"ok"}` | 可选，便于演示 |
+| **`aio-pika` 依赖** | `requirements.txt` 仍注释 | MQ 实现时需取消注释 |
+| **003_intelligence_seed.sql CREATE TABLE** | seed 与 migration 003 重复建表 | 低优先级 |
 
 ### 3.3 待完成总览
 
-**审查前优先顺序**：G（Redis 业务）→ I（最简 compose + README）→ H（MQ 最小可演示）→ J/K（全量验证与 push）。  
-详细步骤见 **§6.4**。
+**审查前优先顺序**：**H**（RabbitMQ 最小可演示链路）→ **I**（docker-compose）→ **J/K**（README、test_results.txt、全量验证与 push）。  
+Redis（G）已完成；详细步骤见 **§6.4**（G 小节可视为已完成，优先 H/I）。
+
+### 3.4 黄金河入项验收对照（2026-07-31）
+
+> 对照入项文档 **一～十一** 节；✓ = 本仓库已满足或基本满足，△ = 部分满足，✗ = 未做。
+
+#### 三、功能要求（10 项）
+
+| # | 要求 | 状态 | 说明 |
+|---|------|------|------|
+| 1 | 收藏夹 CRUD | ✓ | 5 个 Folder API + 单/集成测 |
+| 2 | 分页 + 名称搜索 | ✓ | `keyword` on folder list |
+| 3 | 详情 + 情报数量 | ✓ | `item_count`；Redis Cache-Aside |
+| 4 | 加入情报 | ✓ | POST items |
+| 5 | 移除情报 | ✓ | DELETE item |
+| 6 | 移动情报 | ✓ | PUT move |
+| 7 | 收藏夹内情报分页 | ✓ | GET items list |
+| 8 | 按标题筛选 | ✓ | keyword on item list |
+| 9 | 同情报多收藏夹 | ✓ | 唯一约束 `(folder_id, target_type, target_id)` |
+| 10 | 删收藏夹不删情报 | ✓ | 仅软删 item 关系 |
+
+#### 四、业务规则 R1–R10
+
+| 规则 | 状态 |
+|------|------|
+| R1–R10 | ✓ 均有 Service/集成测覆盖核心路径 |
+
+#### 五、独立设计任务
+
+| # | 内容 | 状态 |
+|---|------|------|
+| 1–10 | 需求/模型/索引/软删/分层/API/事务/N+1/Redis/测试方案 | ✓ `docs/design.md` + `docs/api.md` + 本文档 |
+
+#### 六、强制工程规范（10 条）
+
+| # | 规范 | 状态 |
+|---|------|------|
+| 1–2 | 异步 DB/Redis；无 sync 阻塞 | ✓ |
+| 3–7 | DI Session、分层职责 | ✓ |
+| 8 | 业务异常 + 统一响应 + 日志 | ✓（logger 写法已在 cache 层修正） |
+| 9 | 无全局可变业务状态 | △ `redis_service` 单例为基础设施，与 design 一致 |
+| 10 | 迁移 + seed 脚本 | ✓ 000–003 + scripts/db |
+
+#### 七、Redis 要求（10 条）
+
+| # | 要求 | 状态 |
+|---|------|------|
+| 1–2 | Cache-Aside 读路径 | ✓ |
+| 3 | 读写客户端分离 | ✓ `REDIS_READ_URL` / `REDIS_WRITE_URL` |
+| 4 | 空值短 TTL | ✓ 60s sentinel |
+| 5 | 正常 TTL + 依据 | ✓ 300s，写后主动 delete |
+| 6–7 | 写后失效 / move 双端 | ✓ Service 层已接 |
+| 8–9 | 读降级 + 写删不静默 | ✓ WARNING/ERROR 日志 |
+| 10 | 不缓存 ORM | ✓ `FolderDetailCacheDTO` JSON |
+
+#### 八、测试要求（15 条）
+
+| # | 场景 | 状态 |
+|---|------|------|
+| 1–4 | 收藏夹 CRUD / 重名 / 添加移除 / 不存在 | ✓ |
+| 5 | 移动成功 | ✓ |
+| 6 | 移动失败事务回滚 | △ Router：`test_move_item_router` 目标已存在时两边列表不变；缺 Service 级 mock 回滚单测 |
+| 7 | 并发重复收藏 | ✓ `test_concurrent_add_same_intelligence_same_folder` |
+| 8 | 分页筛选 | ✓ |
+| 9 | 无 N+1 / 无懒加载错误 | △ repo 用 JOIN 实现，**无专项测试** |
+| 10–15 | Redis 缓存六场景 | ✓ `test_folder_cache.py` |
+| — | Service 单测 + HTTP 集成测 | ✓ |
+
+#### 九、任务安排（入项 7 项）
+
+| 任务 | 状态 | 说明 |
+|------|------|------|
+| 任务 1 异步练习修正 | — | 入项前练习，**不在本仓库** |
+| 任务 2 理解黄金河架构 | — | 入项前练习，**不在本仓库** |
+| 任务 3 项目设计 | ✓ | design / api / requirements |
+| 任务 4 收藏夹基础功能 | ✓ | |
+| 任务 5 收藏关系 + 事务 + 缓存 | ✓ | |
+| 任务 6 RabbitMQ 操作日志 | ✗ | 见 §3.2 |
+| 任务 7 测试与代码评审 | △ | 81 测全绿；缺 MQ 测、test_results.txt、README |
+
+#### 十、交付物（10 项）
+
+| # | 交付物 | 状态 |
+|---|--------|------|
+| 1 | 源码 + Git 记录 | ✓ 74 commits |
+| 2 | 设计文档 + API 清单 | ✓ |
+| 3 | 迁移脚本 | △ 000–003 ✓；**004 operation_log ✗** |
+| 4 | 测试数据脚本 | ✓ scripts/db |
+| 5 | 单测 + 集成 + 并发测 | △ 无 MQ 测 |
+| 6 | `.env.example` | ✓ 含 DB/Redis/RabbitMQ 变量 |
+| 7 | README | ✗ 内容过时 |
+| 8 | Docker Compose | ✗ |
+| 9 | 测试执行结果说明 | ✗ 无 `test_results.txt` |
+| 10 | 标准 commit | ✓ |
+
+#### 十一、验收标准（8 条）
+
+| # | 标准 | 状态 |
+|---|------|------|
+| 1 | 项目可运行 | ✓ `uvicorn main:app` + PG |
+| 2 | 异步无 sync 阻塞 | ✓ |
+| 3 | Router 无 SQL/核心逻辑 | ✓ |
+| 4 | Repo 不创建 Session/不 commit | ✓ |
+| 5 | 移动事务保障 | ✓ 单事务 create + soft_delete |
+| 6 | 写后无长期脏缓存 | ✓ invalidate 已接 |
+| 7 | 测试可执行有效 | ✓ 81 passed |
+| 8 | 能解释核心代码 | — 审查现场项 |
+
+**入项整体完成度（粗估）**：核心 API + 规则 + Redis ≈ **85%**；含 MQ + Docker + 文档交付 ≈ **65%**。
+
+### 3.5 历史：待完成总览（v2.3 以前）
 
 ---
 
@@ -386,13 +513,13 @@ Wed–Fri 有效开发约 **33 小时**。
 
 ### 5.2 Redis
 
-- [ ] Cache-Aside 读写正常
-- [ ] 空值 TTL 60s 生效
-- [ ] rename/delete/add/remove/move 后 key 失效
-- [ ] move 双端失效
-- [ ] 读失败降级 + 日志
-- [ ] 写/删失败有日志
-- [ ] 命中时不查 DB（单测验证）
+- [x] Cache-Aside 读写正常
+- [x] 空值 TTL 60s 生效
+- [x] rename/delete/add/remove/move 后 key 失效
+- [x] move 双端失效
+- [x] 读失败降级 + 日志
+- [x] 写/删失败有日志
+- [x] 命中时不查 DB（单测验证）
 
 ### 5.3 RabbitMQ
 
@@ -405,7 +532,7 @@ Wed–Fri 有效开发约 **33 小时**。
 
 ### 5.4 工程交付
 
-- [x] `pytest` 全绿（当前 73 passed）
+- [x] `pytest` 全绿（当前 **81 passed**）
 - [x] `.env.example`
 - [ ] `docker-compose.yml`
 - [ ] README（启动、迁移、测试、consumer、排查）
@@ -956,68 +1083,29 @@ git push
 
 ---
 
-#### 任务 P0-G1：Redis Cache-Aside 业务接入（约 2h，最高优先级）
+#### 任务 P0-G1：Redis Cache-Aside 业务接入 — **已完成 ✓**
 
-**目标**：GET `/folders/{id}` 详情走缓存；写操作后失效；满足 §5.2 核心四项。
+<details>
+<summary>展开查看原步骤（供回溯）</summary>
 
-**步骤 1 — 缓存键与 DTO（约 20min）**
+**步骤 1 — 缓存键与 DTO** ✓  
+**步骤 2 — 缓存服务 `folder_cache.py`** ✓  
+**步骤 3 — 接入 FolderService / ItemService** ✓  
+**步骤 4 — `test_folder_cache.py` 8 条** ✓  
 
-| 文件 | 内容 |
-|------|------|
-| `apps/favorite/common/cache_keys.py` | `folder_detail_key(user_id, folder_id) -> str`，格式见 design §6.4：`folder:detail:{user_id}:{folder_id}` |
-| `apps/favorite/schemas/cache.py` | `FolderDetailCacheDTO`：字段 `id, name, item_count, created_at, updated_at`；提供 `to_json()` / `from_json()` |
+验收：`pytest tests/unit/favorite/test_folder_cache.py -v` + `pytest tests/ -q`（81 passed）
 
-**步骤 2 — 缓存服务（约 40min）**
-
-新建 `apps/favorite/services/cache/folder_cache.py`：
-
-| 函数 | 行为 |
-|------|------|
-| `get_folder_detail_cached(session, redis_read, redis_write, user_id, folder_id)` | 先 `GET` key；命中 return；未命中查 DB 组装 DTO → `SETEX` 300s；NotFound 写空值 sentinel `{"__null__":true}` TTL 60s |
-| `invalidate_folder_detail(redis_write, user_id, folder_id)` | `DELETE` 单 key |
-| `invalidate_folder_detail_many(redis_write, keys)` | move 时删来源+目标 |
-
-**读失败**：`try/except` 包住 redis_read，打 WARNING，降级直查 DB（design §6.4）。
-
-**步骤 3 — 接入 FolderService（约 30min）**
-
-| 写操作 | 失效时机 |
-|--------|----------|
-| `rename_favorite_folder` | commit 后 invalidate 该 folder |
-| `delete_favorite_folder` | 同上 |
-| `ItemService.add_item_to_folder` / `remove_item_from_folder` | commit 后 invalidate 该 folder |
-| `ItemService.move_item` | commit 后 invalidate **来源 + 目标** |
-
-`get_favorite_folder_detail` 改为调用 `get_folder_detail_cached`（Redis 客户端经 Depends 或构造注入）。
-
-**步骤 4 — 单测（约 30min）**
-
-新建 `tests/unit/favorite/test_folder_cache.py`，覆盖 §7.2 六条（mock redis + mock repo）：
-
-1. 命中不查 repo  
-2. 未命中查 DB 并 setex  
-3. 空值缓存 60s  
-4. rename 后 delete key  
-5. move 后双 key delete  
-6. redis_read 异常降级  
-
-**验收命令**：
-
-```bash
-pytest tests/unit/favorite/test_folder_cache.py -v
-pytest tests/ -q   # 全量仍绿
-# 手动：连 redis，连续 GET 同一详情，第二次起 DB query 应减少（可用日志或断点）
-```
+</details>
 
 ---
 
 #### 任务 P0-ENG1：工程小修（约 20min，审查演示用）
 
-| 项 | 文件 | 改动 |
-|----|------|------|
-| 启动可见 Redis 日志 | `main.py` | 文件顶部 `logging.basicConfig(level=logging.INFO, format="...")` |
-| 依赖声明 | `requirements.txt` | 取消注释 `redis>=5.2.0,<6` |
-| 健康检查（可选） | `main.py` 或 `/health` | 返回 `{"status":"ok","redis": true/false}` 便于演示 |
+| 项 | 文件 | 改动 | 状态 |
+|----|------|------|------|
+| 启动可见 Redis 日志 | `main.py` | `logging.basicConfig(level=logging.INFO)` | ✓ |
+| 依赖声明 | `requirements.txt` | `redis>=5.2.0,<6` | ✓ |
+| 健康检查（可选） | `main.py` 或 `/health` | 返回 `{"status":"ok","redis": true/false}` | ✗ |
 
 ---
 
@@ -1235,3 +1323,4 @@ git push
 | v2.1 | 2026-07-29 | 语气优化（过简，已废止） |
 | v2.2 | 2026-07-29 | **全文重写**：恢复文件级/行为级细节；周四/周五任务完整展开；测试矩阵、伪代码、验收命令 |
 | v2.3 | 2026-07-31 | **进度刷新**：§3 基线更新为 73 passed；F1–F5 标记完成；G 部分完成；新增 **§6.4 审查前剩余任务**；§5 验收清单打勾 |
+| v2.4 | 2026-07-31 | **G 完成**：Redis 全链路 + 81 passed；新增 **§3.4 黄金河入项验收对照**；§5.2 Redis 全勾；明确 H/I/J 待办 |
