@@ -15,7 +15,9 @@ from apps.favorite.repositories.item import (
     favorite_item_soft_delete,
     favorite_item_find_by_id_and_user,
     favorite_item_find_in_folder,
+    favorite_item_list_by_folder,
 )
+from apps.favorite.schemas.item import FavoriteItemListQueryParams
 
 
 class ItemService:
@@ -140,4 +142,38 @@ class ItemService:
             "target_id": new_item.target_id,
             "target_type": new_item.target_type,
             "is_deleted": new_item.is_deleted,
+        }
+
+    async def list_items_in_folder(
+        self, folder_id: uuid.UUID, params: FavoriteItemListQueryParams
+    ) -> dict:
+        folder = await favorite_folder_find_by_id_and_user(
+            session=self.session, user_id=params.user_id, folder_id=folder_id
+        )
+        if folder is None or folder.is_deleted:
+            raise FavoriteFolderNotFoundException()
+
+        rows, total = await favorite_item_list_by_folder(
+            session=self.session,
+            folder_id=folder_id,
+            page=params.page,
+            page_size=params.page_size,
+            keyword=params.keyword or "",
+        )
+
+        items = [
+            {
+                "item_id": item.id,
+                "intelligence_id": item.target_id,
+                "title": intel.title,
+                "created_at": item.created_at,
+            }
+            for item, intel in rows
+        ]
+
+        return {
+            "items": items,
+            "total": total,
+            "page": params.page,
+            "page_size": params.page_size,
         }

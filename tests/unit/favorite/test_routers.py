@@ -18,6 +18,25 @@ SEED_BOB_ID = uuid.UUID("fa500001-0002-4000-8000-000000000002")
 SEED_BOB_FOLDER_ID = uuid.UUID("fa500001-0002-4000-8000-000000000101")
 
 FOLDER_DEFAULT_URL = "/grapi/v1/favorite/folders"
+FOLDER_ITEMS_URL = FOLDER_DEFAULT_URL + "/{folder_id}/items"
+ITEM_MOVE_URL = "/grapi/v1/favorite/items/{item_id}/move"
+
+
+async def _list_folder_items(
+    ac: AsyncClient, folder_id: str, user_id: uuid.UUID
+) -> dict:
+    resp = await ac.get(
+        FOLDER_ITEMS_URL.format(folder_id=folder_id),
+        params={"user_id": str(user_id)},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["code"] == 0
+    return body["data"]
+
+
+def _intel_ids(items: list[dict]) -> set[str]:
+    return {item["intelligence_id"] for item in items}
 
 
 @pytest.mark.asyncio
@@ -287,3 +306,123 @@ async def test_remove_item_from_folder():
         assert re_add_resp.status_code == 201
         assert re_add_resp.json()["code"] == 0
         assert re_add_resp.json()["data"]["target_id"] == str(intelligence_id)
+
+
+@pytest.mark.asyncio
+async def test_move_item_router():
+
+    user_id = SEED_ALICE_ID
+    intelligence_id = SEED_INTELLIGENCE_ID
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        src_resp = await ac.post(
+            FOLDER_DEFAULT_URL,
+            json={"user_id": str(user_id), "name": f"move-src-{uuid.uuid4()}"},
+        )
+        assert src_resp.status_code == 201
+        src_folder_id = src_resp.json()["data"]["id"]
+
+        dst_resp = await ac.post(
+            FOLDER_DEFAULT_URL,
+            json={"user_id": str(user_id), "name": f"move-dst-{uuid.uuid4()}"},
+        )
+        assert dst_resp.status_code == 201
+        dst_folder_id = dst_resp.json()["data"]["id"]
+
+        add_resp = await ac.post(
+            FOLDER_ITEMS_URL.format(folder_id=src_folder_id),
+            json={
+                "user_id": str(user_id),
+                "intelligence_id": str(intelligence_id),
+            },
+        )
+        assert add_resp.status_code == 201
+        item_id = add_resp.json()["data"]["id"]
+
+        src_before = await _list_folder_items(ac, src_folder_id, user_id)
+        dst_before = await _list_folder_items(ac, dst_folder_id, user_id)
+        assert src_before["total"] == 1
+        assert str(intelligence_id) in _intel_ids(src_before["items"])
+        assert dst_before["total"] == 0
+        assert dst_before["items"] == []
+
+        move_resp = await ac.put(
+            ITEM_MOVE_URL.format(item_id=item_id),
+            json={
+                "user_id": str(user_id),
+                "target_folder_id": dst_folder_id,
+            },
+        )
+        assert move_resp.status_code == 200
+        move_body = move_resp.json()
+        assert move_body["code"] == 0
+        assert move_body["msg"] == "success"
+
+        data = move_body["data"]
+        assert data["id"] != item_id
+        assert data["user_id"] == str(user_id)
+        assert data["folder_id"] == dst_folder_id
+        assert data["target_id"] == str(intelligence_id)
+        assert data["target_type"] == "intelligence"
+        assert data["is_deleted"] is False
+
+        src_after = await _list_folder_items(ac, src_folder_id, user_id)
+        dst_after = await _list_folder_items(ac, dst_folder_id, user_id)
+        assert src_after["total"] == 0
+        assert src_after["items"] == []
+        assert dst_after["total"] == 1
+        assert str(intelligence_id) in _intel_ids(dst_after["items"])
+
+        # --- 异常：目标 folder 已有同一情报，移动失败，两边列表不变 ---
+        rollback_src_resp = await ac.post(
+            FOLDER_DEFAULT_URL,
+            json={"user_id": str(user_id), "name": f"move-rollback-src-{uuid.uuid4()}"},
+        )
+        rollback_dst_resp = await ac.post(
+            FOLDER_DEFAULT_URL,
+            json={"user_id": str(user_id), "name": f"move-rollback-dst-{uuid.uuid4()}"},
+        )
+        rb_src_id = rollback_src_resp.json()["data"]["id"]
+        rb_dst_id = rollback_dst_resp.json()["data"]["id"]
+
+        rb_add_src = await ac.post(
+            FOLDER_ITEMS_URL.format(folder_id=rb_src_id),
+            json={
+                "user_id": str(user_id),
+                "intelligence_id": str(intelligence_id),
+            },
+        )
+        rb_item_id = rb_add_src.json()["data"]["id"]
+        await ac.post(
+            FOLDER_ITEMS_URL.format(folder_id=rb_dst_id),
+            json={
+                "user_id": str(user_id),
+                "intelligence_id": str(intelligence_id),
+            },
+        )
+
+        rb_src_before = await _list_folder_items(ac, rb_src_id, user_id)
+        rb_dst_before = await _list_folder_items(ac, rb_dst_id, user_id)
+        assert rb_src_before["total"] == 1
+        assert rb_dst_before["total"] == 1
+
+        fail_resp = await ac.put(
+            ITEM_MOVE_URL.format(item_id=rb_item_id),
+            json={
+                "user_id": str(user_id),
+                "target_folder_id": rb_dst_id,
+            },
+        )
+        assert fail_resp.status_code == 200
+        fail_body = fail_resp.json()
+        assert fail_body["code"] == 409041
+        assert fail_body["msg"] == "FAVORITE_ITEM_ALREADY_EXISTS"
+
+        rb_src_after = await _list_folder_items(ac, rb_src_id, user_id)
+        rb_dst_after = await _list_folder_items(ac, rb_dst_id, user_id)
+        assert rb_src_after["total"] == rb_src_before["total"]
+        assert rb_dst_after["total"] == rb_dst_before["total"]
+        assert _intel_ids(rb_src_after["items"]) == _intel_ids(rb_src_before["items"])
+        assert _intel_ids(rb_dst_after["items"]) == _intel_ids(rb_dst_before["items"])
