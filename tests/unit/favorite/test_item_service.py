@@ -1,6 +1,7 @@
 """ItemService 单测"""
 
 import uuid
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,6 +65,57 @@ async def test_add_item_success(session: AsyncSession):
 
     listed = await _list_items(service, folder_id, user_id)
     assert listed["total"] == 1
+
+
+PUBLISH_PATH = "apps.favorite.services.item.publish_favorite_added"
+
+
+@pytest.mark.asyncio
+@patch(PUBLISH_PATH, new_callable=AsyncMock)
+async def test_add_item_success_publishes_event(mock_publish, session: AsyncSession):
+    mock_publish.return_value = uuid.uuid4()
+    user_id = SEED_ALICE_ID
+    folder_id = await _create_folder(session, user_id, f"add-mq-{uuid.uuid4()}")
+    mq_channel = AsyncMock()
+    service = ItemService(session=session, mq_channel=mq_channel)
+
+    await service.add_item_to_folder(
+        user_id=user_id,
+        folder_id=folder_id,
+        intelligence_id=SEED_INTELLIGENCE_ID,
+    )
+
+    mock_publish.assert_awaited_once_with(
+        mq_channel,
+        user_id=user_id,
+        folder_id=folder_id,
+        intelligence_id=SEED_INTELLIGENCE_ID,
+    )
+
+
+@pytest.mark.asyncio
+@patch(PUBLISH_PATH, new_callable=AsyncMock)
+async def test_add_item_duplicate_does_not_publish(mock_publish, session: AsyncSession):
+    mock_publish.return_value = uuid.uuid4()
+    user_id = SEED_ALICE_ID
+    folder_id = await _create_folder(session, user_id, f"add-mq-dup-{uuid.uuid4()}")
+    service = ItemService(session=session, mq_channel=AsyncMock())
+
+    await service.add_item_to_folder(
+        user_id=user_id,
+        folder_id=folder_id,
+        intelligence_id=SEED_INTELLIGENCE_ID,
+    )
+    assert mock_publish.await_count == 1
+
+    with pytest.raises(FavoriteItemAlreadyExistsException):
+        await service.add_item_to_folder(
+            user_id=user_id,
+            folder_id=folder_id,
+            intelligence_id=SEED_INTELLIGENCE_ID,
+        )
+
+    mock_publish.assert_awaited_once()
 
 
 # --- #20 同 folder 重复加入 ---

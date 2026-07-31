@@ -1,5 +1,6 @@
 import uuid
 
+from aio_pika.abc import AbstractChannel
 from redis.asyncio import Redis
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from apps.favorite.exceptions import (
     FavoriteItemNotFoundException,
     IntelligenceNotFoundException,
 )
+from apps.favorite.mq.publisher import publish_favorite_added
 from apps.favorite.repositories.folder import favorite_folder_find_by_id_and_user
 from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
 from apps.favorite.repositories.item import (
@@ -28,15 +30,18 @@ from apps.favorite.services.cache.folder_cache import (
 
 
 class ItemService:
+
     def __init__(
         self,
         session: AsyncSession,
         redis_read: Redis | None = None,
         redis_write: Redis | None = None,
+        mq_channel: AbstractChannel | None = None,
     ):
         self.session = session
         self.redis_read = redis_read
         self.redis_write = redis_write
+        self.mq_channel = mq_channel
 
     async def add_item_to_folder(
         self, user_id: uuid.UUID, folder_id: uuid.UUID, intelligence_id: uuid.UUID
@@ -71,6 +76,13 @@ class ItemService:
             await invalidate_folder_detail(
                 self.redis_write, user_id=user_id, folder_id=folder_id
             )
+
+        await publish_favorite_added(
+            self.mq_channel,
+            user_id=user_id,
+            folder_id=folder_id,
+            intelligence_id=intelligence_id,
+        )
 
         return {
             "id": item.id,
