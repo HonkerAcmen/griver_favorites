@@ -25,3 +25,5 @@ pytest-asyncio
 pytest
 httpx
 uliweb-alembic
+booktype
+crefi
