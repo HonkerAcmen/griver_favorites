@@ -11,6 +11,7 @@ from apps.favorite.exceptions import (
     FavoriteItemNotFoundException,
 )
 from apps.favorite.models import GriverFavoriteFolder, GriverFavoriteItem
+from apps.favorite.repositories.item import favorite_item_find_in_folder
 from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
 from apps.favorite.services.folder import FolderService
 from apps.favorite.services.item import ItemService
@@ -343,3 +344,131 @@ async def test_remove_item_from_folder(session: AsyncSession):
         user_id=user_id, folder_id=folder_id, item_id=new_item["id"]
     )
     assert delete_item["folder_id"] == folder_id
+
+
+@pytest.mark.asyncio
+async def test_move_item(session: AsyncSession):
+    item_service = ItemService(session=session)
+    folder_service = FolderService(session=session)
+    user_id = SEED_ALICE_ID
+    intelligence_id = SEED_INTELLIGENCE_ID
+
+    source_folder_id, _ = await _create_folder(
+        session, user_id, f"move-src-{uuid.uuid4()}"
+    )
+    target_folder_id, _ = await _create_folder(
+        session, user_id, f"move-dst-{uuid.uuid4()}"
+    )
+
+    # item 不存在
+    with pytest.raises(FavoriteItemNotFoundException):
+        await item_service.move_item(
+            user_id=user_id,
+            item_id=uuid.uuid4(),
+            target_folder_id=target_folder_id,
+        )
+
+    item = await item_service.add_item_to_folder(
+        user_id=user_id,
+        folder_id=source_folder_id,
+        intelligence_id=intelligence_id,
+    )
+    item_id = item["id"]
+
+    # 非 item 所属 user
+    with pytest.raises(FavoriteItemNotFoundException):
+        await item_service.move_item(
+            user_id=SEED_BOB_ID,
+            item_id=item_id,
+            target_folder_id=target_folder_id,
+        )
+
+    # 来源 folder 已不含该 item（已软删，R5）
+    await item_service.remove_item_from_folder(
+        user_id=user_id, folder_id=source_folder_id, item_id=item_id
+    )
+    with pytest.raises(FavoriteItemNotFoundException):
+        await item_service.move_item(
+            user_id=user_id,
+            item_id=item_id,
+            target_folder_id=target_folder_id,
+        )
+
+    # 重新添加，用于后续场景
+    item = await item_service.add_item_to_folder(
+        user_id=user_id,
+        folder_id=source_folder_id,
+        intelligence_id=intelligence_id,
+    )
+    item_id = item["id"]
+
+    # 目标 folder 已有同一 intelligence（R6）
+    await item_service.add_item_to_folder(
+        user_id=user_id,
+        folder_id=target_folder_id,
+        intelligence_id=intelligence_id,
+    )
+    with pytest.raises(FavoriteItemAlreadyExistsException):
+        await item_service.move_item(
+            user_id=user_id,
+            item_id=item_id,
+            target_folder_id=target_folder_id,
+        )
+
+    # 成功移动：来源软删，目标新建
+    success_src_id, _ = await _create_folder(
+        session, user_id, f"move-ok-src-{uuid.uuid4()}"
+    )
+    success_dst_id, _ = await _create_folder(
+        session, user_id, f"move-ok-dst-{uuid.uuid4()}"
+    )
+    movable = await item_service.add_item_to_folder(
+        user_id=user_id,
+        folder_id=success_src_id,
+        intelligence_id=intelligence_id,
+    )
+    movable_id = movable["id"]
+
+    moved = await item_service.move_item(
+        user_id=user_id,
+        item_id=movable_id,
+        target_folder_id=success_dst_id,
+    )
+
+    assert moved["folder_id"] == success_dst_id
+    assert moved["target_id"] == intelligence_id
+    assert moved["is_deleted"] is False
+
+    # 来源 item 已被软删
+    source_row = await session.get(GriverFavoriteItem, movable_id)
+    assert source_row is not None
+    assert source_row.is_deleted is True
+    assert source_row.folder_id == success_src_id
+
+    # 来源 folder 查不到 active item
+    assert (
+        await favorite_item_find_in_folder(
+            session,
+            folder_id=success_src_id,
+            target_type="intelligence",
+            target_id=intelligence_id,
+        )
+        is None
+    )
+
+    # 目标 folder 有 active item
+    target_row = await favorite_item_find_in_folder(
+        session,
+        folder_id=success_dst_id,
+        target_type="intelligence",
+        target_id=intelligence_id,
+    )
+    assert target_row is not None
+    assert target_row.id == moved["id"]
+    assert target_row.is_deleted is False
+
+    # 清理
+    await folder_service.delete_favorite_folder(user_id, source_folder_id)
+    await folder_service.delete_favorite_folder(user_id, target_folder_id)
+    await folder_service.delete_favorite_folder(user_id, success_src_id)
+    await folder_service.delete_favorite_folder(user_id, success_dst_id)
