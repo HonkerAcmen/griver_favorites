@@ -1,14 +1,30 @@
 import importlib
+import logging
 import pkgutil
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 
 from apps.core.exception_handlers import register_exception_handlers
+from apps.core.redis import redis_service
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await redis_service.init_redis()
+    logging.log(logging.INFO, "[Lifespan] Redis initialized")
+
+    yield
+
+    logging.log(logging.INFO, "[Lifespan] Redis closed")
+    await redis_service.close()
+
+
+
+logging.basicConfig(level=logging.INFO)
+app = FastAPI(lifespan=lifespan)
 register_exception_handlers(app)
-
 
 def register_router(application: FastAPI):
     apps_dir = Path(__file__).parent / "apps"

@@ -3,11 +3,11 @@
 | 字段 | 内容 |
 |------|------|
 | **文档类型** | 需求说明 + 可执行开发计划（文件级 / 行为级） |
-| **版本** | v2.2 |
-| **编制日期** | 2026-07-29 |
+| **版本** | v2.3 |
+| **编制日期** | 2026-07-29（v2.2）；**进度刷新 2026-07-31** |
 | **计划周期** | 2026-07-29（周三，自 B2 起）— 2026-07-31（周五）23:00 |
 | **交付范围** | 9 HTTP 接口、业务规则 R1–R10、Redis Cache-Aside、RabbitMQ 操作日志、Docker Compose、全量自动化测试 |
-| **当前工作项** | **B2**：`FolderService.create_folder` 真写库 + `test_folder_service.py` |
+| **当前工作项** | **G**：Redis Cache-Aside 业务接入（`folder_cache.py` + 写后失效 + 单测） |
 | **关联文档** | [design.md](./design.md) v3.0、[api.md](./api.md) v2.0 |
 
 ---
@@ -245,11 +245,95 @@ favorite_operation_log
 
 ---
 
-## 3. 进度基线（2026-07-29）
+## 3. 进度基线（2026-07-31 15:35 刷新）
 
-> 以下以 **git 提交 + 仓库文件 + pytest 结果** 为准，非文档主观估计。
+> 以下以 **git 提交 + 仓库文件 + `pytest tests/` 结果** 为准。  
+> **当前 pytest：73 passed**（单元 + 集成，含并发 R9）。
 
-### 3.1 已完成
+### 3.1 已完成（可审查展示）
+
+#### 3.1.1 HTTP 接口（9/9）
+
+| # | 方法 | 路径 | 实现文件 | 测试 |
+|---|------|------|----------|------|
+| 1 | POST | `/folders` | `routers/folder.py` | unit + integration |
+| 2 | GET | `/folders` | 同上 | 同上 |
+| 3 | GET | `/folders/{id}` | 同上 | 同上 |
+| 4 | PATCH | `/folders/{id}` | 同上 | 同上 |
+| 5 | DELETE | `/folders/{id}` | 同上 | 同上 |
+| 6 | POST | `/folders/{id}/items` | `routers/item.py` | unit + integration |
+| 7 | DELETE | `/folders/{id}/items/{item_id}` | 同上 | 同上 |
+| 8 | PUT | `/items/{item_id}/move` | 同上 | integration + unit |
+| 9 | GET | `/folders/{id}/items` | 同上 | integration（含 keyword） |
+
+#### 3.1.2 业务层与规则
+
+| 模块 | 路径 | 说明 |
+|------|------|------|
+| FolderService | `services/folder.py` | CRUD 全实现；A8 边界单测（分页钳制、keyword `%`、软删后 list/同名重建） |
+| ItemService | `services/item.py` | add / remove / move / list；R4 情报校验已接 `intelligence_find_by_id_not_deleted` |
+| Folder Repo | `repositories/folder.py` | 含 rename、soft_delete、级联 item、count_items、list |
+| Item Repo | `repositories/item.py` | create / find / list / soft_delete |
+| 异常 + 映射 | `exceptions.py`、`exception_handlers.py` | R10；item 唯一索引 → `FAVORITE_ITEM_ALREADY_EXISTS` |
+| 配置 | `apps/core/config.py`、`.env`、`.env.example` | DB + Redis + RabbitMQ 环境变量 |
+| CI | `ci.py` | 本地 lint / test 入口 |
+
+#### 3.1.3 测试覆盖摘要
+
+| 文件 | 条数 | 覆盖范围 |
+|------|------|----------|
+| `tests/unit/favorite/test_repo.py` | 21 | folder + item repo |
+| `tests/unit/favorite/test_folder_service.py` | 14 | folder service（含 A8） |
+| `tests/unit/favorite/test_item_service.py` | 12 | design §10.2 #19–27 |
+| `tests/unit/favorite/test_routers.py` | 8 | 各 Router HTTP 形态（含 move + 列表） |
+| `tests/integration/favorite/test_folder_router.py` | 10 | folder 集成 §10.1 |
+| `tests/integration/favorite/test_item_router.py` | 8 | item 集成 F4 + **F5 并发 R9**（`test_concurrent_add_same_intelligence_same_folder`） |
+
+#### 3.1.4 常用 seed UUID（不变）
+
+| 用途 | UUID |
+|------|------|
+| Alice user | `fa500001-0001-4000-8000-000000000001` |
+| Alice 有效情报 | `fa700001-0001-4000-8000-000000000001` |
+| Alice 已删情报（R4） | `fa700001-0001-4000-8000-000000000099` |
+
+#### 3.1.5 已完成任务编号（对照 §6）
+
+| 阶段 | 任务 | 状态 |
+|------|------|------|
+| 周三晚 | B2–C3 | ✓ |
+| 周四 | A6–A8、B5–B8、C2、C4；C5 部分（`.env.example` ✓） | ✓ |
+| 周五 | F1–F5 | ✓ |
+| 周五 | G（Redis 基建：客户端 + lifespan） | **部分** |
+| 周五 | H（RabbitMQ）、I（Docker）、J/K（交付收尾） | ✗ |
+
+### 3.2 未完成（审查前必须对齐预期）
+
+| 项 | 现状 | 影响 |
+|----|------|------|
+| Redis Cache-Aside **业务层** | `apps/core/redis.py` + `main.py` lifespan 已有；**未**接 `get_favorite_folder_detail` | §5.2 未满足；详情仍直连 DB |
+| Redis 写后失效 | rename/delete/add/remove/move 均未 `delete` cache key | 缓存即使接入也会脏读 |
+| `test_folder_cache.py` | 未建 | §7.2 六条未覆盖 |
+| RabbitMQ 全系 | 无 migration 004、无 publisher/consumer | §5.3 未满足 |
+| `docker-compose.yml` | 无 | §5.4 未满足 |
+| README 启动说明 | 未更新 Redis/MQ/compose | 审查第一印象 |
+| `requirements.txt` 中 `redis` | 仍注释（venv 或已手动安装） | 他人 clone 后可能缺依赖 |
+| `main.py` logging | 默认 WARNING，lifespan INFO 不可见 | 演示 Redis 初始化不直观 |
+| `003_intelligence_seed.sql` CREATE TABLE | 仍未清理 | 低优先级 |
+
+### 3.3 待完成总览
+
+**审查前优先顺序**：G（Redis 业务）→ I（最简 compose + README）→ H（MQ 最小可演示）→ J/K（全量验证与 push）。  
+详细步骤见 **§6.4**。
+
+---
+
+## 3.x 历史进度基线（2026-07-29，已过期，仅供回溯）
+
+<details>
+<summary>点击展开 2026-07-29 旧基线（B2 进行中）</summary>
+
+### 3.1 已完成（2026-07-29 快照）
 
 #### 3.1.1 命名对照（避免文档与代码不一致）
 
@@ -257,72 +341,9 @@ favorite_operation_log
 |-------------|-------------------|
 | `favorite_folder_create` | **`favorite_create_folder`** |
 
-#### 3.1.2 分项清单
+（以下 2026-07-29 条目已过时：FolderService 曾为 pass、Item 未实现等，以 §3 顶部 2026-07-31 刷新为准。）
 
-| 类别 | 路径 / 内容 | 状态说明 |
-|------|-------------|----------|
-| 设计文档 | `docs/design.md` v3.0、`docs/api.md` | 已对齐完整作业（含 Redis/MQ） |
-| Migration | `000_create_user` → `001` → `002` → **`003_intelligence`** | `alembic upgrade head` 可到 003 |
-| ORM | `apps/favorite/models.py` | User、Intelligence、GriverFavoriteFolder、GriverFavoriteItem |
-| 常量 | `apps/favorite/common/constants.py` | `TARGET_TYPE_INTELLIGENCE`、`FOLDER_NAME_MAX_LEN=100`、`PAGE_*` |
-| DB 会话 | `apps/core/database.py` | `get_db_session` 使用 `async with` |
-| 依赖注入 | `apps/favorite/dependencies.py` | `return FolderService(session)`，无错误 await |
-| Folder Repo | `apps/favorite/repositories/folder.py` | 四函数已实现（见下表） |
-| Intelligence Repo | `apps/favorite/repositories/intelligence.py` | 返回 `Intelligence \| None` |
-| 异常（folder） | `apps/favorite/exceptions.py` | NotFound、Duplicate、Invalid |
-| Router 壳 | `apps/favorite/routers/folder.py` | POST 已接 Service，但 Service 未实现 |
-| Schema | `schemas/folder.py` | `user_id: str`（**建议**改 UUID） |
-| 单测 repo | `tests/unit/favorite/test_repo.py` | **9 条**（folder 8 + intelligence 1） |
-| 单测 router | `tests/unit/favorite/test_routers.py` | **1 条** AsyncMock |
-| **pytest 合计** | | **10 passed** |
-
-**Folder Repository 已实现函数**：
-
-| 函数 | 行为摘要 |
-|------|----------|
-| `favorite_create_folder(session, user_id, folder_name)` | add + flush，不 commit |
-| `favorite_folder_find_by_id_and_user(session, folder_id, user_id)` | id + user + `is_deleted=false` |
-| `favorite_folder_count_by_name(session, user_id, name)` | 返回 0 或 1 |
-| `favorite_folder_list_by_user(session, user_id, page, page_size, keyword)` | 分页 + ILIKE 转义 + `updated_at DESC` → `(items, total)` |
-
-**Intelligence Repository**：
-
-| 函数 | 行为摘要 |
-|------|----------|
-| `intelligence_find_by_id_not_deleted(session, intelligence_id)` | 有效情报返回 ORM；否则 None；单测含软删 seed `...000099` |
-
-**Seed 数据（可重复执行）**：
-
-| 脚本 | 内容 |
-|------|------|
-| `002_users_seed.sql` | 5 用户（alice–eve） |
-| `003_intelligence_seed.sql` | 80 有效 + 5 软删（**仍含 CREATE TABLE，待清理**） |
-| `004_favorite_seed.sql` | 15 folder + 105 item |
-
-**常用 seed UUID**：
-
-| 用途 | UUID |
-|------|------|
-| Alice user | `fa500001-0001-4000-8000-000000000001` |
-| Alice 有效情报 | `fa700001-0001-4000-8000-000000000001` |
-| Alice 已删情报（R4） | `fa700001-0001-4000-8000-000000000099` |
-| Alice seed folder | `fa500001-0001-4000-8000-000000000101`（重点情报） |
-
-#### 3.1.3 明确未完成（勿误以为已交付）
-
-| 项 | 现状 |
-|----|------|
-| `FolderService.create_folder` | 方法体为 **`pass`** |
-| `test_folder_service.py` | 文件存在，**内容为空** |
-| POST 创建 | Router 可调，**不会真正写库** |
-| GET 列表/详情/PATCH/DELETE | 未实现 |
-| Item 全系 | 未实现 |
-| Redis / MQ / Docker | 未实现 |
-| 集成测试 | `tests/integration/favorite/` 仅 `__init__.py` |
-
-### 3.2 待完成总览
-
-目标时间：**2026-07-31（周五）23:00**。详细任务见 §6。
+</details>
 
 ---
 
@@ -357,11 +378,11 @@ Wed–Fri 有效开发约 **33 小时**。
 
 ### 5.1 核心 API 与数据
 
-- [ ] 9 接口在 `/docs` 可调用，与 api.md 一致
-- [ ] R1–R10 有单元或集成测试覆盖
+- [x] 9 接口在 `/docs` 可调用，与 api.md 一致
+- [x] R1–R10 有单元或集成测试覆盖（核心路径；Redis 降级测除外）
 - [ ] `alembic upgrade head`：000–003 + **004_operation_log**
-- [ ] seed 002→003→004 可重复执行
-- [ ] 业务层无同步 Session / Redis / HTTP
+- [x] seed 002→003→004 可重复执行
+- [x] 业务层无同步 Session / Redis / HTTP（Redis 客户端为 asyncio）
 
 ### 5.2 Redis
 
@@ -384,12 +405,12 @@ Wed–Fri 有效开发约 **33 小时**。
 
 ### 5.4 工程交付
 
-- [ ] `pytest` 全绿
-- [ ] `.env.example`
+- [x] `pytest` 全绿（当前 73 passed）
+- [x] `.env.example`
 - [ ] `docker-compose.yml`
 - [ ] README（启动、迁移、测试、consumer、排查）
 - [ ] `test_results.txt` 可复现
-- [ ] Git 提交清晰
+- [ ] Git 提交清晰（审查前需 push 最终版）
 
 ---
 
@@ -745,7 +766,7 @@ git commit -m "feat(favorite): complete folder CRUD and item add/remove"
 
 ---
 
-#### F1（08:30–10:00）— PUT 移动情报
+#### F1（08:30–10:00）— PUT 移动情报 ✓ **已完成**
 
 **Schema**：`FavoriteItemMoveInSchema` — `user_id`, `target_folder_id`
 
@@ -765,7 +786,7 @@ git commit -m "feat(favorite): complete folder CRUD and item add/remove"
 
 ---
 
-#### F2（10:00–11:30）— GET 收藏夹内情报列表
+#### F2（10:00–11:30）— GET 收藏夹内情报列表 ✓ **已完成**
 
 **Service**：`list_items_in_folder` → `favorite_item_list_by_folder`
 
@@ -775,7 +796,7 @@ git commit -m "feat(favorite): complete folder CRUD and item add/remove"
 
 ---
 
-#### F3（11:30–12:00）— Item Service 单测
+#### F3（11:30–12:00）— Item Service 单测 ✓ **已完成**
 
 **新建** `tests/unit/favorite/test_item_service.py`
 
@@ -783,7 +804,7 @@ git commit -m "feat(favorite): complete folder CRUD and item add/remove"
 
 ---
 
-#### F4（14:00–15:00）— Item 集成测试
+#### F4（14:00–15:00）— Item 集成测试 ✓ **已完成**
 
 **新建** `tests/integration/favorite/test_item_router.py`
 
@@ -799,16 +820,17 @@ git commit -m "feat(favorite): complete folder CRUD and item add/remove"
 
 ---
 
-#### F5（15:00–15:45）— 并发重复收藏（R9）
+#### F5（15:00–15:45）— 并发重复收藏（R9）✓ **已完成**
 
-**新建** `tests/integration/favorite/test_concurrency.py`
+**实现位置**：`tests/integration/favorite/test_item_router.py::test_concurrent_add_same_intelligence_same_folder`  
+（原计划的独立文件 `test_concurrency.py` 可不再新建，除非希望目录拆分。）
 
 - 同 folder 并发 N 次 POST add 同一 intelligence  
 - 预期：最终仅 **1** 条 active item；其余 DUPLICATE
 
 ---
 
-#### G（15:45–17:30）— Redis 全量
+#### G（15:45–17:30）— Redis 全量 — **进行中（基建 ✓，业务 ✗）**
 
 **15:45–16:15 基础设施**
 
@@ -924,6 +946,167 @@ git push
 ```
 
 对照 **§5** 逐项打勾。
+
+---
+
+### 6.4 审查前剩余任务（2026-07-31 下午 → 明早，按优先级执行）
+
+> **背景**：核心 9 API + 73 条 pytest 已绿；审查重点将转向 **Redis 缓存、MQ、工程化交付**。  
+> 下列任务按 **必须 → 建议 → 可选** 排序；每项含：做什么、改哪些文件、怎么验收。
+
+---
+
+#### 任务 P0-G1：Redis Cache-Aside 业务接入（约 2h，最高优先级）
+
+**目标**：GET `/folders/{id}` 详情走缓存；写操作后失效；满足 §5.2 核心四项。
+
+**步骤 1 — 缓存键与 DTO（约 20min）**
+
+| 文件 | 内容 |
+|------|------|
+| `apps/favorite/common/cache_keys.py` | `folder_detail_key(user_id, folder_id) -> str`，格式见 design §6.4：`folder:detail:{user_id}:{folder_id}` |
+| `apps/favorite/schemas/cache.py` | `FolderDetailCacheDTO`：字段 `id, name, item_count, created_at, updated_at`；提供 `to_json()` / `from_json()` |
+
+**步骤 2 — 缓存服务（约 40min）**
+
+新建 `apps/favorite/services/cache/folder_cache.py`：
+
+| 函数 | 行为 |
+|------|------|
+| `get_folder_detail_cached(session, redis_read, redis_write, user_id, folder_id)` | 先 `GET` key；命中 return；未命中查 DB 组装 DTO → `SETEX` 300s；NotFound 写空值 sentinel `{"__null__":true}` TTL 60s |
+| `invalidate_folder_detail(redis_write, user_id, folder_id)` | `DELETE` 单 key |
+| `invalidate_folder_detail_many(redis_write, keys)` | move 时删来源+目标 |
+
+**读失败**：`try/except` 包住 redis_read，打 WARNING，降级直查 DB（design §6.4）。
+
+**步骤 3 — 接入 FolderService（约 30min）**
+
+| 写操作 | 失效时机 |
+|--------|----------|
+| `rename_favorite_folder` | commit 后 invalidate 该 folder |
+| `delete_favorite_folder` | 同上 |
+| `ItemService.add_item_to_folder` / `remove_item_from_folder` | commit 后 invalidate 该 folder |
+| `ItemService.move_item` | commit 后 invalidate **来源 + 目标** |
+
+`get_favorite_folder_detail` 改为调用 `get_folder_detail_cached`（Redis 客户端经 Depends 或构造注入）。
+
+**步骤 4 — 单测（约 30min）**
+
+新建 `tests/unit/favorite/test_folder_cache.py`，覆盖 §7.2 六条（mock redis + mock repo）：
+
+1. 命中不查 repo  
+2. 未命中查 DB 并 setex  
+3. 空值缓存 60s  
+4. rename 后 delete key  
+5. move 后双 key delete  
+6. redis_read 异常降级  
+
+**验收命令**：
+
+```bash
+pytest tests/unit/favorite/test_folder_cache.py -v
+pytest tests/ -q   # 全量仍绿
+# 手动：连 redis，连续 GET 同一详情，第二次起 DB query 应减少（可用日志或断点）
+```
+
+---
+
+#### 任务 P0-ENG1：工程小修（约 20min，审查演示用）
+
+| 项 | 文件 | 改动 |
+|----|------|------|
+| 启动可见 Redis 日志 | `main.py` | 文件顶部 `logging.basicConfig(level=logging.INFO, format="...")` |
+| 依赖声明 | `requirements.txt` | 取消注释 `redis>=5.2.0,<6` |
+| 健康检查（可选） | `main.py` 或 `/health` | 返回 `{"status":"ok","redis": true/false}` 便于演示 |
+
+---
+
+#### 任务 P1-I1：Docker Compose 最简版（约 45min）
+
+**目标**：审查时可说「一条命令起 PG + Redis + RabbitMQ」；app 仍可本地 `uvicorn` 连接。
+
+新建 `docker-compose.yml`（可先不含 app  build，降低今晚工作量）：
+
+- `postgres:16` → 5432  
+- `redis:7` → 6379  
+- `rabbitmq:3-management` → 5672 / 15672  
+
+**验收**：
+
+```bash
+docker compose up -d
+docker compose ps   # 三服务 healthy / running
+redis-cli ping      # PONG
+```
+
+---
+
+#### 任务 P1-H1：RabbitMQ 最小可演示链路（约 2–2.5h，时间紧可做「发消息 + 落库」简化版）
+
+**完整版见 §6.3 H**；审查**最低线**：
+
+1. **migration 004**：`favorite_operation_log` 表，`event_id` UNIQUE  
+2. **`apps/favorite/mq/publisher.py`**：`publish_favorite_added(...)`，在 `add_item_to_folder` **commit 成功后**调用  
+3. **Consumer 简化**：`python -m apps.favorite.mq.consumer` 消费一条写 `operation_log`；manual ack  
+4. **集成测 1 条**：add 成功 → 等待 → log 表有记录  
+
+Broker 不可用：publisher `except` 打 ERROR，**HTTP 仍 201**（§5.3 最后一条）。
+
+若时间不够：**审查口述** design §6.5 设计 + 展示 `.env` 中 MQ 变量 + publisher 空壳，明晚补 consumer。
+
+---
+
+#### 任务 P1-README：README 审查版（约 30min）
+
+更新 `README.md` 章节：
+
+1. **当前进度**：9 API ✓、73 tests ✓、Redis/MQ 状态  
+2. **环境要求**：Python 3.14、PostgreSQL、Redis、RabbitMQ  
+3. **快速开始**：venv → pip → `.env` → alembic → seed → uvicorn  
+4. **测试**：`pytest tests/ -q`  
+5. **Docker**：`docker compose up -d`  
+6. **MQ Consumer**（若已实现）：启动命令  
+
+---
+
+#### 任务 P2-J1：审查前全量验证（约 30min，明早执行）
+
+```bash
+pytest tests/ --tb=short 2>&1 | tee test_results.txt
+uvicorn main:app --reload
+# 浏览器打开 /docs，9 接口各点一次
+```
+
+走查清单：
+
+- [ ] `test_results.txt` 与 CI 输出一致（全绿）  
+- [ ] `/docs` 9 接口可调用  
+- [ ] `rg 'session\.query' apps/` 无结果  
+
+---
+
+#### 任务 P2-K1：Git 收尾（审查前）
+
+```bash
+git add ...
+git commit -m "feat(favorite): redis cache-aside and delivery docs"  # 按实际改动
+git push
+```
+
+---
+
+#### 建议时间分配（今晚 ~4h 可用时）
+
+| 顺序 | 任务 | 时长 |
+|------|------|------|
+| 1 | P0-ENG1 工程小修 | 20min |
+| 2 | P0-G1 Redis 业务 + 单测 | 2h |
+| 3 | P1-I1 docker-compose | 45min |
+| 4 | P1-README | 30min |
+| 5 | P1-H1 MQ（能写多少写多少） | 剩余时间 |
+| 明早 | P2-J1 + P2-K1 | 1h |
+
+**若只能做一件事**：优先 **P0-G1**，审查时最有说服力。
 
 ---
 
@@ -1051,3 +1234,4 @@ git push
 | v2.0 | 2026-07-29 | 纳入 Redis/MQ；周五 23:00 截止 |
 | v2.1 | 2026-07-29 | 语气优化（过简，已废止） |
 | v2.2 | 2026-07-29 | **全文重写**：恢复文件级/行为级细节；周四/周五任务完整展开；测试矩阵、伪代码、验收命令 |
+| v2.3 | 2026-07-31 | **进度刷新**：§3 基线更新为 73 passed；F1–F5 标记完成；G 部分完成；新增 **§6.4 审查前剩余任务**；§5 验收清单打勾 |
