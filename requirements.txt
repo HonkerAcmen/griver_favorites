@@ -14,7 +14,7 @@ pydantic-settings>=2.6.0,<3
 redis>=5.2.0,<6
 
 # 后续 D4 RabbitMQ（可选，用时取消注释；具体包名随 GoldRiver 宿主对齐）
-# aio-pika>=9.5.0,<10
+aio-pika>=9.5.0,<10
 
 python-dotenv
 pydantic
