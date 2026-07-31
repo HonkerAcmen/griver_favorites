@@ -1,0 +1,55 @@
+# 本地基础设施：PostgreSQL + Redis + RabbitMQ
+# App 仍在本机运行：uvicorn main:app --reload
+# Consumer：python -m apps.favorite.mq.consumer
+#
+# 启动：docker compose up -d
+# 验证：docker compose ps
+#       redis-cli -h localhost ping
+#       open http://localhost:15672  (guest/guest)
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: griver_favorites_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: griver_favorites
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d griver_favorites"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: griver_favorites_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: griver_favorites_rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
