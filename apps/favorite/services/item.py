@@ -8,8 +8,10 @@ from apps.favorite.exceptions import (
     FavoriteItemAlreadyExistsException,
     FavoriteItemMoveFailedException,
     FavoriteItemNotFoundException,
+    IntelligenceNotFoundException,
 )
 from apps.favorite.repositories.folder import favorite_folder_find_by_id_and_user
+from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
 from apps.favorite.repositories.item import (
     favorite_item_create,
     favorite_item_soft_delete,
@@ -36,7 +38,9 @@ class ItemService:
         if folder.is_deleted:
             raise FavoriteFolderNotFoundException()
 
-        # TODO 查询intell是否存在 如果不存在返回IntellNotFound
+        intel = await intelligence_find_by_id_not_deleted(self.session, intelligence_id)
+        if intel is None:
+            raise IntelligenceNotFoundException()
 
         try:
             item = await favorite_item_create(
