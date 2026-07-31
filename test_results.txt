@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/feixue/PycharmProjects/griver_favorites
+plugins: asyncio-1.4.0, cov-6.3.0, anyio-4.14.2
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 101 items
+
+tests/integration/favorite/test_folder_router.py ..........              [  9%]
+tests/integration/favorite/test_item_router.py ........                  [ 17%]
+tests/integration/favorite/test_mq_favorite_add.py .....                 [ 22%]
+tests/unit/favorite/test_folder_cache.py ........                        [ 30%]
+tests/unit/favorite/test_folder_service.py ..............                [ 44%]
+tests/unit/favorite/test_item_service.py ..............                  [ 58%]
+tests/unit/favorite/test_mq_consumer.py ........                         [ 66%]
+tests/unit/favorite/test_mq_publisher.py ...                             [ 69%]
+tests/unit/favorite/test_repo.py .......................                 [ 92%]
+tests/unit/favorite/test_routers.py ........                             [100%]
+
+============================= 101 passed in 4.09s ==============================
