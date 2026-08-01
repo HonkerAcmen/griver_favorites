@@ -8,22 +8,9 @@
 -- 每用户 15 条有效情报 + 1 条已软删（用于 R4 测试）
 -- =============================================================================
 
+-- 注意 必须先跑alembic upgrade head  和 002_users_seed.sql 才能继续执行本脚本
+
 BEGIN;
-
-CREATE TABLE intelligence (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title      VARCHAR(255) NOT NULL,
-    is_deleted BOOLEAN NOT NULL DEFAULT false,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_intelligence_user_active
-    ON intelligence (user_id, is_deleted);
-
-CREATE INDEX IF NOT EXISTS idx_intelligence_title
-    ON intelligence (title);
 
 DELETE FROM intelligence
 WHERE id >= 'fa700000-0000-4000-8000-000000000000'::uuid
