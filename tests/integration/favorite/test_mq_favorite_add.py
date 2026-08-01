@@ -1,6 +1,7 @@
 """RabbitMQ 收藏事件集成测试：真实 Broker + DB；无 RabbitMQ 时 skip。"""
 
 import asyncio
+import time
 import uuid
 from datetime import datetime
 from unittest.mock import patch
@@ -77,6 +78,17 @@ async def _drain_queue(queue) -> None:
         if message is None:
             break
         await message.ack()
+
+
+async def _wait_dlq_message(dlq, *, timeout: float = 3.0, interval: float = 0.05):
+    """Poll DLQ; basic_get returns immediately when empty (no long wait)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        message = await dlq.get(timeout=1, fail=False)
+        if message is not None:
+            return message
+        await asyncio.sleep(interval)
+    return None
 
 
 @pytest.mark.asyncio
@@ -179,7 +191,7 @@ async def test_consume_failures_end_up_in_dlq(mock_process, mq_setup):
         assert incoming is not None
         await handle_message(incoming, channel)
 
-    dlq_message = await dlq.get(timeout=5, fail=False)
+    dlq_message = await _wait_dlq_message(dlq)
     assert dlq_message is not None
     await dlq_message.ack()
     mock_process.assert_called()
