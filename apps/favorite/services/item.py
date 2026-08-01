@@ -11,6 +11,8 @@ from apps.favorite.exceptions import (
     FavoriteItemMoveFailedException,
     FavoriteItemNotFoundException,
     IntelligenceNotFoundException,
+    FavoriteUserNotFoundException,
+    FavoriteInternalDataConflict,
 )
 from apps.favorite.mq.publisher import publish_favorite_added
 from apps.favorite.repositories.folder import favorite_folder_find_by_id_and_user
@@ -70,7 +72,19 @@ class ItemService:
             await self.session.commit()
         except IntegrityError as e:
             await self.session.rollback()
-            raise FavoriteItemAlreadyExistsException() from e
+            if e.orig is None:
+                msg = str(e)
+            else:
+                msg = str(e.orig)
+
+            if "uq_griver_favorite_item_folder_target_active" in msg:
+                raise FavoriteItemAlreadyExistsException() from e
+            elif "griver_favorite_item_folder_id_fkey" in msg:
+                raise FavoriteFolderNotFoundException() from e
+            elif "griver_favorite_item_user_id_fkey" in msg:
+                raise FavoriteUserNotFoundException() from e
+            else:
+                raise FavoriteInternalDataConflict() from e
 
         if self.redis_write is not None:
             await invalidate_folder_detail(
@@ -172,7 +186,19 @@ class ItemService:
         except IntegrityError as e:
             # 出现唯一性索引错误
             await self.session.rollback()
-            raise FavoriteItemAlreadyExistsException() from e
+            if e.orig is None:
+                msg = str(e)
+            else:
+                msg = str(e.orig)
+
+            if "uq_griver_favorite_item_folder_target_active" in msg:
+                raise FavoriteItemAlreadyExistsException() from e
+            elif "griver_favorite_item_folder_id_fkey" in msg:
+                raise FavoriteFolderNotFoundException() from e
+            elif "griver_favorite_item_user_id_fkey" in msg:
+                raise FavoriteUserNotFoundException() from e
+            else:
+                raise FavoriteInternalDataConflict() from e
 
         if self.redis_write is not None:
             await invalidate_folder_detail_many(

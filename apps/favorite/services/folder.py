@@ -11,6 +11,8 @@ from apps.favorite.exceptions import (
     FavoriteFolderNameInvalidException,
     FavoriteFolderNameDuplicateException,
     FavoriteFolderNotFoundException,
+    FavoriteUserNotFoundException,
+    FavoriteInternalDataConflict,
 )
 from apps.favorite.models import GriverFavoriteFolder, GriverFavoriteItem
 from apps.favorite.repositories.folder import (
@@ -61,7 +63,19 @@ class FolderService:
             }
         except IntegrityError as e:
             await self.session.rollback()
-            raise FavoriteFolderNameDuplicateException() from e
+            if e.orig is None:
+                msg = str(e)
+            else:
+                msg = str(e.orig)
+
+            if "uq_griver_favorite_folder_user_name_active" in msg:
+                raise FavoriteFolderNameDuplicateException() from e
+            elif "griver_favorite_folder_user_id_fkey" in msg:
+                raise FavoriteUserNotFoundException() from e
+            elif "value too long" in msg or "character varying(100)" in msg:
+                raise FavoriteFolderNameInvalidException() from e
+            else:
+                raise FavoriteInternalDataConflict() from e
 
     async def list_favorite_folders(
         self, params: FavoriteFolderListQueryParams
@@ -114,9 +128,25 @@ class FolderService:
             folder.updated_at = datetime.datetime.now(timezone.utc)
             new_folder = folder
         else:
-            new_folder = await favorite_folder_update_name(
-                session=self.session, folder=folder, new_name=clean_name
-            )
+            try:
+                new_folder = await favorite_folder_update_name(
+                    session=self.session, folder=folder, new_name=clean_name
+                )
+            except IntegrityError as e:
+                await self.session.rollback()
+                if e.orig is None:
+                    msg = str(e)
+                else:
+                    msg = str(e.orig)
+
+                if "uq_griver_favorite_folder_user_name_active" in msg:
+                    raise FavoriteFolderNameDuplicateException() from e
+                elif "griver_favorite_folder_user_id_fkey" in msg:
+                    raise FavoriteUserNotFoundException() from e
+                elif "value too long" in msg or "character varying(100)" in msg:
+                    raise FavoriteFolderNameInvalidException() from e
+                else:
+                    raise FavoriteInternalDataConflict() from e
 
         await self.session.commit()
         if self.redis_write is not None:

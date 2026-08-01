@@ -92,3 +92,12 @@ class FavoriteUserNotFoundException(BusinessException):
 
     def __init__(self) -> None:
         super().__init__(404041, "FAVORITE_USER_NOT_EXISTS")
+
+
+class FavoriteInternalDataConflict(BusinessException):
+    """
+    数据冲突
+    """
+
+    def __init__(self) -> None:
+        super().__init__(500001, "INTERNAL_DATA_CONFLICT")
