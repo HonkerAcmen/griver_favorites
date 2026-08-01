@@ -1,3 +1,5 @@
+import random
+import string
 import uuid
 
 import pytest
@@ -235,3 +237,39 @@ async def test_create_folder_after_soft_delete_same_name(session: AsyncSession):
     second = await service.create_folder(user_id, folder_name)
     assert second["name"] == folder_name
     assert uuid.UUID(str(second["id"])) != first_id
+
+
+# 测试重命名
+@pytest.mark.asyncio
+async def test_rename_favorite_folder_rename(session: AsyncSession):
+    user_id = SEED_ALICE_ID
+    folder_name = str(uuid.uuid4()) + "-service-test-rename"
+    new_folder_id, new_folder_name = await _create_folder(
+        session=session, user_id=user_id, name=folder_name
+    )
+    assert folder_name == new_folder_name
+
+    folder_service = FolderService(session)
+    new_folder_name = str(uuid.uuid4()) + "-service-test-rename"
+
+    rename_folder = await folder_service.rename_favorite_folder(
+        user_id, new_folder_id, new_folder_name
+    )
+    assert rename_folder.name == new_folder_name
+
+    # 测试名字限制 100 字符
+    new_folder_name = str(uuid.uuid4()) + "".join(
+        random.choices(string.ascii_letters + string.digits, k=110)
+    )
+    with pytest.raises(FavoriteFolderNameInvalidException):
+        await folder_service.rename_favorite_folder(
+            user_id, new_folder_id, new_folder_name
+        )
+
+    # 测试strip()
+    new_folder_name = "    " + str(uuid.uuid4()) + "-service-test"
+    strip_new_folder_name = new_folder_name.strip()
+    rename_folder = await folder_service.rename_favorite_folder(
+        user_id, new_folder_id, new_folder_name
+    )
+    assert rename_folder.name == strip_new_folder_name

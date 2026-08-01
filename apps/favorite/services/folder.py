@@ -100,7 +100,7 @@ class FolderService:
         self, user_id: uuid.UUID, folder_id: uuid.UUID, name: str
     ) -> GriverFavoriteFolder:
         clean_name = name.strip()
-        if len(clean_name) == 0:
+        if len(clean_name) == 0 or len(clean_name) > FOLDER_NAME_MAX_LEN:
             raise FavoriteFolderNameInvalidException()
 
         folder = await favorite_folder_find_by_id_and_user(
@@ -115,7 +115,7 @@ class FolderService:
             new_folder = folder
         else:
             new_folder = await favorite_folder_update_name(
-                session=self.session, folder=folder, new_name=name
+                session=self.session, folder=folder, new_name=clean_name
             )
 
         await self.session.commit()
