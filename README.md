@@ -18,7 +18,7 @@ GoldRiver 情报收藏夹（Favorite）独立服务。支持收藏夹 CRUD、情
 
 | 文档 | 说明 |
 |------|------|
-| [docs/design.md](docs/design.md) | 数据模型、分层、缓存/MQ、测试设计（v3.1） |
+| [docs/design.md](docs/design.md) | 数据模型、分层、缓存/MQ 泳道图、测试设计（v3.2） |
 | [docs/api.md](docs/api.md) | API 清单，路由前缀 `/grapi/v1/favorite`（v2.1） |
 | [docs/requirements.md](docs/requirements.md) | 需求、验收清单、进度（v2.5） |
 

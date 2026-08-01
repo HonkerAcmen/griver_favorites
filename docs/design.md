@@ -2,8 +2,8 @@
 
 > **项目**：griver_favorites  
 > **架构参考**：Router → Service → Repository 分层  
-> **版本**：v3.1  
-> **日期**：2026-07-31  
+> **版本**：v3.2  
+> **日期**：2026-08-01  
 > **状态**：**已实现**（9 API + Redis Cache-Aside + RabbitMQ 操作日志 + Docker Compose；**101 passed**）
 
 **关联文档**：[api.md](./api.md)（接口清单，错误码与本文档 §8 保持一致）
@@ -511,6 +511,106 @@ Depends(get_db_session)          # 注意：不加括号
 
 **禁止**：直接 `pickle`/缓存 ORM 实例。
 
+#### 6.4.1 读路径泳道图（Cache-Aside）
+
+实现：`FolderService.get_favorite_folder_detail` → `get_folder_detail_cached`（`services/cache/folder_cache.py`）。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as 客户端
+    participant R as Router
+    participant S as FolderService
+    participant FC as folder_cache
+    participant RR as Redis Read
+    participant RW as Redis Write
+    participant DB as PostgreSQL
+
+    C->>R: GET /folders/{id}?user_id=
+    R->>S: get_favorite_folder_detail()
+    S->>FC: get_folder_detail_cached()
+
+    FC->>RR: GET key
+    alt 缓存命中
+        RR-->>FC: JSON DTO
+        FC-->>S: 返回详情 + item_count
+        S-->>R: data
+        R-->>C: 200
+    else 缓存命中空值 sentinel
+        RR-->>FC: {"__null__": true}
+        FC-->>S: 抛 FOLDER_NOT_EXISTS
+        S-->>R: 业务异常
+        R-->>C: 200 + 错误码
+    else 缓存未命中
+        RR-->>FC: nil
+        FC->>DB: 查 folder + count items
+        alt folder 不存在
+            DB-->>FC: None
+            FC->>RW: SETEX key 60s (空值)
+            FC-->>S: 抛 FOLDER_NOT_EXISTS
+            S-->>R: 业务异常
+            R-->>C: 200 + 错误码
+        else folder 存在
+            DB-->>FC: folder + item_count
+            FC->>RW: SETEX key 300s (DTO JSON)
+            FC-->>S: 返回详情
+            S-->>R: data
+            R-->>C: 200
+        end
+    else Redis 读异常
+        RR--xFC: 异常
+        Note over FC: WARNING 日志，降级
+        FC->>DB: 查 folder + count items
+        DB-->>FC: 结果
+        FC-->>S: 返回（写缓存失败仅 ERROR）
+        S-->>R: data
+        R-->>C: 200
+    end
+```
+
+#### 6.4.2 写路径泳道图（写后失效）
+
+写操作 commit **成功后**调用 `invalidate_folder_detail` 或 `invalidate_folder_detail_many`；失败或 rollback **不**删缓存。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as 客户端
+    participant R as Router
+    participant S as Service<br/>(Folder / Item)
+    participant DB as PostgreSQL
+    participant RW as Redis Write
+
+    C->>R: 写操作请求
+    R->>S: rename / delete / add / remove / move
+
+    S->>DB: 业务校验 + 写库
+    alt 失败
+        DB-->>S: 异常 / 业务规则失败
+        S->>DB: rollback（如适用）
+        S-->>R: 业务异常
+        R-->>C: 200 + 错误码
+        Note over RW: 不删缓存
+    else 成功
+        S->>DB: commit
+        DB-->>S: OK
+        alt redis_write 可用
+            S->>RW: DELETE folder:detail:{user}:{folder}
+            Note over S,RW: move 时 DELETE 来源 + 目标两个 key
+            alt DELETE 失败
+                RW--xS: 异常
+                Note over S: ERROR 日志，HTTP 仍成功
+            else DELETE 成功
+                RW-->>S: OK
+            end
+        else redis_write 为 None
+            Note over S: 跳过失效，直接返回
+        end
+        S-->>R: 成功 data
+        R-->>C: 200 / 201
+    end
+```
+
 ### 6.5 RabbitMQ 收藏事件
 
 **触发点**：`ItemService.add_item_to_folder` 在 **`await session.commit()` 成功之后**。
@@ -527,6 +627,102 @@ Depends(get_db_session)          # 注意：不加括号
 | MQ 不可用 | 收藏 HTTP 仍成功；publisher 打 ERROR 日志 |
 
 **操作日志表**（migration 004）：见 requirements §6.5 H1。
+
+#### 6.5.1 发布路径泳道图（HTTP 侧）
+
+实现：`ItemService.add_item_to_folder` commit 后 → `publish_favorite_added`（`mq/publisher.py`）。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as 客户端
+    participant R as Item Router
+    participant S as ItemService
+    participant DB as PostgreSQL
+    participant RW as Redis Write
+    participant P as Publisher
+    participant EX as RabbitMQ Exchange<br/>favorite.events
+
+    C->>R: POST /folders/{id}/items
+    R->>S: add_item_to_folder()
+
+    S->>DB: 校验 folder / intelligence
+    S->>DB: INSERT favorite_item
+    alt DB 失败 / 重复收藏
+        DB-->>S: IntegrityError
+        S->>DB: rollback
+        S-->>R: ALREADY_EXISTS 等
+        R-->>C: 200 + 错误码
+        Note over P,EX: 不发消息
+    else commit 成功
+        S->>DB: commit
+        DB-->>S: OK
+        S->>RW: invalidate_folder_detail（可选）
+        S->>P: publish_favorite_added()
+        P->>P: 生成 event_id + FavoriteAddedEvent JSON
+        alt channel 可用
+            P->>EX: publish (persistent, routing_key)
+            EX-->>P: OK
+        else channel 不可用 / 发布异常
+            P-->>P: ERROR 日志
+            Note over S: 不抛异常，HTTP 仍 201
+        end
+        S-->>R: 201 + item data
+        R-->>C: 201
+    end
+```
+
+#### 6.5.2 消费路径泳道图（Consumer 独立进程）
+
+实现：`python -m apps.favorite.mq.consumer` → `handle_message` → `process_favorite_added_message`（`mq/consumer.py`）。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Q as Queue<br/>favorite.operation_log
+    participant C as Consumer<br/>handle_message
+    participant DB as PostgreSQL<br/>favorite_operation_log
+    participant EX as Exchange
+    participant DLQ as DLQ<br/>favorite.operation_log.dlq
+
+    Q->>C: 投递消息 (manual ack)
+    C->>C: 解析 FavoriteAddedEvent JSON
+
+    alt JSON 格式非法
+        C->>Q: reject(requeue=false)
+        Note over Q: 丢弃（不进 DLQ）
+    else 格式合法
+        C->>DB: BEGIN + INSERT operation_log
+        alt event_id 已存在 (IntegrityError)
+            DB-->>C: 唯一约束冲突
+            Note over C: 幂等：视为已处理
+            C->>Q: ack
+        else 插入成功
+            DB-->>C: commit OK
+            C->>Q: ack
+        else 其他异常
+            DB-->>C: 失败
+            alt retry_count >= 2（第 3 次失败）
+                C->>Q: reject(requeue=false)
+                Q->>DLQ: 死信路由
+            else 未达上限
+                C->>EX: republish (x-retry-count + 1)
+                C->>Q: ack 原消息
+                EX->>Q: 重新入队
+            end
+        end
+    end
+```
+
+#### 6.5.3 Redis 与 RabbitMQ 对照
+
+| 维度 | Redis | RabbitMQ |
+|------|-------|----------|
+| 触发接口 | GET 详情读缓存；多种写操作失效 | 仅 POST add item |
+| 与事务关系 | commit **后** delete key | commit **后** publish |
+| 失败策略 | 读降级 DB；写删失败只打日志 | 发布失败 HTTP 仍 201；消费重试 3 次 → DLQ |
+| 幂等 | 空值 sentinel 防穿透 | `event_id` UNIQUE |
+| 进程 | 随 uvicorn lifespan | 独立 `python -m apps.favorite.mq.consumer` |
 
 ### 6.3 Schema 命名
 
@@ -747,6 +943,7 @@ Consumer 须单独进程运行（见 README）；Publisher 在 `ItemService.add_
 
 | 版本 | 日期 | 变更摘要 |
 |------|------|----------|
+| v3.2 | 2026-08-01 | §6.4.1/6.4.2 Redis 泳道图；§6.5.1/6.5.2 RabbitMQ 泳道图；§6.5.3 对照表 |
 | v3.1 | 2026-07-31 | §6.1/6.2 全量实现；§10.5 测试映射；§12 Docker 无 app 容器；§15 实现状态 |
 | v3.0 | 2026-07-29 | Redis/MQ/Docker 纳入范围；§6.1–6.2 对齐代码函数名 |
 | v1.0 | 2026-07-27 | 初版 folder CRUD |

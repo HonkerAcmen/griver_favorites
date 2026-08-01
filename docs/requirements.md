@@ -8,7 +8,7 @@
 | **计划周期** | 2026-07-29（周三，自 B2 起）— 2026-07-31（周五）23:00 |
 | **交付范围** | 9 HTTP 接口、业务规则 R1–R10、Redis Cache-Aside、RabbitMQ 操作日志、Docker Compose、全量自动化测试 |
 | **当前工作项** | **交付收尾**：可选增强（health 探针、N+1 专项测、main.py MQ 优雅降级） |
-| **关联文档** | [design.md](./design.md) v3.1、[api.md](./api.md) v2.1 |
+| **关联文档** | [design.md](./design.md) v3.2、[api.md](./api.md) v2.1 |
 
 ---
 
