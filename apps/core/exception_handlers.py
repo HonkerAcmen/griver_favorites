@@ -4,9 +4,14 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
 from apps.core.response import business_fail
+from apps.favorite.common.integrity import (
+    integrity_error_message,
+)
 from apps.favorite.exceptions import (
     BusinessException,
     FavoriteFolderNameDuplicateException,
+    FavoriteFolderNameInvalidException,
+    FavoriteInternalDataConflict,
     FavoriteItemAlreadyExistsException,
 )
 
@@ -25,23 +30,20 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def handle_integrity_error(
         request: Request, exc: IntegrityError
     ) -> JSONResponse:
-        # 不把原始 DB 错误暴露给客户端；按约束类型映射业务码
-        message = str(exc.orig) if exc.orig else str(exc)
+        message = integrity_error_message(exc)
         if "uq_griver_favorite_folder_user_name_active" in message:
-            dup = FavoriteFolderNameDuplicateException()
-            return JSONResponse(
-                status_code=dup.http_status,
-                content=business_fail(dup.code, dup.msg),
-            )
-
-        if "uq_griver_favorite_item_folder_target_active" in message:
-            dup = FavoriteItemAlreadyExistsException()
-            return JSONResponse(
-                status_code=dup.http_status, content=business_fail(dup.code, dup.msg)
-            )
+            biz = FavoriteFolderNameDuplicateException()
+        elif "uq_griver_favorite_item_folder_target_active" in message:
+            biz = FavoriteItemAlreadyExistsException()
+        elif "uq_griver_favorite_item_user_target_active" in message:
+            biz = FavoriteItemAlreadyExistsException()
+        elif "value too long" in message and "character varying(100)" in message:
+            biz = FavoriteFolderNameInvalidException()
+        else:
+            biz = FavoriteInternalDataConflict()
         return JSONResponse(
-            status_code=200,
-            content=business_fail(500001, "INTERNAL_DATA_CONFLICT"),
+            status_code=biz.http_status,
+            content=business_fail(biz.code, biz.msg),
         )
 
     @app.exception_handler(RequestValidationError)

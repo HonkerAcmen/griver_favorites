@@ -5,6 +5,7 @@ from redis.asyncio import Redis
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.favorite.common.integrity import raise_item_integrity_error
 from apps.favorite.exceptions import (
     FavoriteFolderNotFoundException,
     FavoriteItemAlreadyExistsException,
@@ -12,11 +13,11 @@ from apps.favorite.exceptions import (
     FavoriteItemNotFoundException,
     IntelligenceNotFoundException,
     FavoriteUserNotFoundException,
-    FavoriteInternalDataConflict,
 )
 from apps.favorite.mq.publisher import publish_favorite_added
 from apps.favorite.repositories.folder import favorite_folder_find_by_id_and_user
 from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
+from apps.favorite.repositories.user import user_find_active_by_id
 from apps.favorite.repositories.item import (
     favorite_item_create,
     favorite_item_soft_delete,
@@ -45,9 +46,16 @@ class ItemService:
         self.redis_write = redis_write
         self.mq_channel = mq_channel
 
+    async def _ensure_user_exists(self, user_id: uuid.UUID) -> None:
+        user = await user_find_active_by_id(self.session, user_id)
+        if user is None:
+            raise FavoriteUserNotFoundException()
+
     async def add_item_to_folder(
         self, user_id: uuid.UUID, folder_id: uuid.UUID, intelligence_id: uuid.UUID
     ) -> dict:
+        await self._ensure_user_exists(user_id)
+
         folder = await favorite_folder_find_by_id_and_user(
             session=self.session, user_id=user_id, folder_id=folder_id
         )
@@ -72,19 +80,7 @@ class ItemService:
             await self.session.commit()
         except IntegrityError as e:
             await self.session.rollback()
-            if e.orig is None:
-                msg = str(e)
-            else:
-                msg = str(e.orig)
-
-            if "uq_griver_favorite_item_folder_target_active" in msg:
-                raise FavoriteItemAlreadyExistsException() from e
-            elif "griver_favorite_item_folder_id_fkey" in msg:
-                raise FavoriteFolderNotFoundException() from e
-            elif "griver_favorite_item_user_id_fkey" in msg:
-                raise FavoriteUserNotFoundException() from e
-            else:
-                raise FavoriteInternalDataConflict() from e
+            raise_item_integrity_error(e)
 
         if self.redis_write is not None:
             await invalidate_folder_detail(
@@ -184,21 +180,8 @@ class ItemService:
             await favorite_item_soft_delete(session=self.session, item=curr_item)
             await self.session.commit()
         except IntegrityError as e:
-            # 出现唯一性索引错误
             await self.session.rollback()
-            if e.orig is None:
-                msg = str(e)
-            else:
-                msg = str(e.orig)
-
-            if "uq_griver_favorite_item_folder_target_active" in msg:
-                raise FavoriteItemAlreadyExistsException() from e
-            elif "griver_favorite_item_folder_id_fkey" in msg:
-                raise FavoriteFolderNotFoundException() from e
-            elif "griver_favorite_item_user_id_fkey" in msg:
-                raise FavoriteUserNotFoundException() from e
-            else:
-                raise FavoriteInternalDataConflict() from e
+            raise_item_integrity_error(e)
 
         if self.redis_write is not None:
             await invalidate_folder_detail_many(

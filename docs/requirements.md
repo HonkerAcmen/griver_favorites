@@ -8,7 +8,7 @@
 | **计划周期** | 2026-07-29（周三，自 B2 起）— 2026-07-31（周五）23:00 |
 | **交付范围** | 9 HTTP 接口、业务规则 R1–R10、Redis Cache-Aside、RabbitMQ 操作日志、Docker Compose、全量自动化测试 |
 | **当前工作项** | **交付收尾**：可选增强（health 探针、N+1 专项测、main.py MQ 优雅降级） |
-| **关联文档** | [design.md](./design.md) v3.2、[api.md](./api.md) v2.1 |
+| **关联文档** | [design.md](./design.md) v3.3、[api.md](./api.md) v2.1 |
 
 ---
 
@@ -371,6 +371,14 @@ uvicorn main:app --reload
 | 规则 | 状态 |
 |------|------|
 | R1–R10 | ✓ 均有 Service/集成测覆盖核心路径 |
+
+#### 引用完整性（外键策略）
+
+| 项 | 状态 | 说明 |
+|----|------|------|
+| item → intelligence 逻辑引用 | ✓ | 无物理 FK；Service R4 校验 |
+| user / folder 逻辑引用 + Service | ✓ | 005 删物理 FK；见 design §3.6 |
+| 全逻辑外键（去掉所有 DB FK） | ✓ | migration 005 + Service 校验 |
 
 #### 五、独立设计任务
 

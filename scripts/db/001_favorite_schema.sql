@@ -12,7 +12,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS intelligence (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id    UUID NOT NULL,
     title      VARCHAR(255) NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -27,7 +27,7 @@ CREATE INDEX IF NOT EXISTS idx_intelligence_title
 
 CREATE TABLE IF NOT EXISTS griver_favorite_folder (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id    UUID NOT NULL,
     name       VARCHAR(100) NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -43,8 +43,8 @@ CREATE INDEX IF NOT EXISTS idx_griver_favorite_folder_user_list
 
 CREATE TABLE IF NOT EXISTS griver_favorite_item (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    folder_id   UUID NOT NULL REFERENCES griver_favorite_folder(id),
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    folder_id   UUID NOT NULL,
+    user_id     UUID NOT NULL,
     target_type VARCHAR(50) NOT NULL,
     target_id   UUID NOT NULL,
     is_deleted  BOOLEAN NOT NULL DEFAULT false,

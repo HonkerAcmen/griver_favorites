@@ -23,12 +23,23 @@ from apps.favorite.repositories.item import (
     favorite_item_list_by_folder,
 )
 from apps.favorite.repositories.operation_log import operation_log_create
+from apps.favorite.repositories.user import user_find_active_by_id
 
 SEED_ALICE_ID = uuid.UUID("fa500001-0001-4000-8000-000000000001")
 SEED_BOB_ID = uuid.UUID("fa500001-0002-4000-8000-000000000002")
 SEED_ALICE_FOLDER_ID = uuid.UUID("fa500001-0001-4000-8000-000000000101")
 SEED_INTELLIGENCE_ID = uuid.UUID("fa700001-0001-4000-8000-000000000001")
 SEED_INTELLIGENCE_DELETED_ID = uuid.UUID("fa700001-0001-4000-8000-000000000099")
+
+
+@pytest.mark.asyncio
+async def test_user_find_active_by_id(session: AsyncSession):
+    found = await user_find_active_by_id(session, SEED_ALICE_ID)
+    assert found is not None
+    assert found.id == SEED_ALICE_ID
+    assert found.is_deleted is False
+
+    assert await user_find_active_by_id(session, uuid.uuid4()) is None
 
 
 @pytest.mark.asyncio

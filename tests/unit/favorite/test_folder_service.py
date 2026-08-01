@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.favorite.exceptions import (
     FavoriteFolderNameInvalidException,
     FavoriteFolderNameDuplicateException,
+    FavoriteUserNotFoundException,
 )
 from apps.favorite.models import GriverFavoriteFolder, GriverFavoriteItem
 from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
@@ -24,6 +25,13 @@ async def _create_folder(
     service = FolderService(session=session)
     result = await service.create_folder(user_id=user_id, name=folder_name)
     return uuid.UUID(str(result["id"])), folder_name
+
+
+@pytest.mark.asyncio
+async def test_create_folder_invalid_user_raises(session: AsyncSession):
+    service = FolderService(session=session)
+    with pytest.raises(FavoriteUserNotFoundException):
+        await service.create_folder(user_id=uuid.uuid4(), name="orphan-folder")
 
 
 @pytest.mark.asyncio

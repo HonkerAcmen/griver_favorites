@@ -12,6 +12,7 @@ from apps.favorite.exceptions import (
     FavoriteItemMoveFailedException,
     FavoriteItemNotFoundException,
     IntelligenceNotFoundException,
+    FavoriteUserNotFoundException,
 )
 from apps.favorite.models import GriverFavoriteItem
 from apps.favorite.repositories.intelligence import intelligence_find_by_id_not_deleted
@@ -42,6 +43,20 @@ async def _list_items(
         user_id=user_id, page=1, page_size=10, keyword=None
     )
     return await item_service.list_items_in_folder(folder_id=folder_id, params=params)
+
+
+@pytest.mark.asyncio
+async def test_add_item_invalid_user_raises(session: AsyncSession):
+    user_id = SEED_ALICE_ID
+    folder_id = await _create_folder(session, user_id, f"add-bad-user-{uuid.uuid4()}")
+    service = ItemService(session=session)
+
+    with pytest.raises(FavoriteUserNotFoundException):
+        await service.add_item_to_folder(
+            user_id=uuid.uuid4(),
+            folder_id=folder_id,
+            intelligence_id=SEED_INTELLIGENCE_ID,
+        )
 
 
 # --- #19 加入成功 ---

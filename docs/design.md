@@ -2,7 +2,7 @@
 
 > **项目**：griver_favorites  
 > **架构参考**：Router → Service → Repository 分层  
-> **版本**：v3.2  
+> **版本**：v3.4  
 > **日期**：2026-08-01  
 > **状态**：**已实现**（9 API + Redis Cache-Aside + RabbitMQ 操作日志 + Docker Compose；**101 passed**）
 
@@ -130,8 +130,9 @@ erDiagram
 
 说明：
 
-- `INTELLIGENCE` 为本项目**只读**测试/引用表；不建跨表物理 FK 到 `favorite_item`，由 Service 校验。
-- 同一情报可被多个 folder 收藏；约束在 **folder 维度** 去重（§3.4）。
+- `INTELLIGENCE` 为本项目**只读**测试/引用表；**`favorite_item.target_id` 不建物理 FK**，由 Service 校验（R4）。
+- 同库强归属关系（`user_id`、`folder_id`）**不建物理 FK**，由 Service 层逻辑校验，策略详见 **§3.6**。
+- 同一情报可被多个 folder 收藏；约束在 **folder 维度** 去重（§3.5）。
 
 ### 3.2 表：users
 
@@ -151,7 +152,7 @@ erDiagram
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | id | UUID | PK | |
-| user_id | UUID | NOT NULL | 测试数据归属 |
+| user_id | UUID | NOT NULL, **逻辑引用** users.id | 测试数据归属；见 §3.6 |
 | title | VARCHAR(255) | NOT NULL | 列表筛选字段（R8） |
 | is_deleted | BOOLEAN | DEFAULT false | 已删不可收藏（R4） |
 | created_at | TIMESTAMPTZ | NOT NULL | |
@@ -172,7 +173,7 @@ CREATE INDEX idx_intelligence_title
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | id | UUID | PK | |
-| user_id | UUID | NOT NULL, FK → users.id | API 传入 |
+| user_id | UUID | NOT NULL, **逻辑引用** users.id | API 传入；见 §3.6 |
 | name | VARCHAR(100) | NOT NULL | strip 后 1~100 字符 |
 | is_deleted | BOOLEAN | DEFAULT false | |
 | created_at | TIMESTAMPTZ | NOT NULL | |
@@ -196,10 +197,10 @@ CREATE INDEX idx_griver_favorite_folder_user_list
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | id | UUID | PK | |
-| folder_id | UUID | NOT NULL, FK → griver_favorite_folder.id | |
-| user_id | UUID | NOT NULL, FK → users.id | 冗余，便于按用户查询 |
+| folder_id | UUID | NOT NULL, **逻辑引用** griver_favorite_folder.id | 见 §3.6 |
+| user_id | UUID | NOT NULL, **逻辑引用** users.id | 冗余，便于按用户查询 |
 | target_type | VARCHAR(50) | NOT NULL | 本期固定 `intelligence` |
-| target_id | UUID | NOT NULL | → intelligence.id |
+| target_id | UUID | NOT NULL | **逻辑引用** intelligence.id（无物理 FK） |
 | is_deleted | BOOLEAN | DEFAULT false | |
 | created_at | TIMESTAMPTZ | NOT NULL | |
 
@@ -219,7 +220,47 @@ CREATE INDEX idx_griver_favorite_item_folder
 
 **软删 folder（R8）**：folder 软删时，其下未删 item **级联软删**；**不**修改 `intelligence` 表。
 
-### 3.6 类型枚举 TargetType
+### 3.6 外键与引用完整性策略（审查说明）
+
+> **结论**：本项目采用 **全逻辑外键**——同库表间归属与跨模块情报引用均在 **Service 层校验**；PostgreSQL **不**保留 `user_id` / `folder_id` 物理外键。  
+> 迁移 `005_drop_physical_foreign_keys.py` 删除历史 FK；ORM `models.py` 无 `ForeignKey` 声明。
+
+#### 3.6.1 策略总览
+
+| 引用关系 | 物理 FK | Service 层校验 | 说明 |
+|----------|---------|----------------|------|
+| `griver_favorite_folder.user_id` → `users.id` | ✗ | `user_find_active_by_id`（create_folder） | 同库强归属 |
+| `griver_favorite_item.folder_id` → `griver_favorite_folder.id` | ✗ | add/move/list 前查 folder（R3） | |
+| `griver_favorite_item.user_id` → `users.id` | ✗ | `_ensure_user_exists` + folder 按 user 隔离 | |
+| `intelligence.user_id` → `users.id` | ✗ | seed 预置用户 | 测试数据表 |
+| `griver_favorite_item.target_id` → `intelligence.id` | ✗ | `intelligence_find_by_id_not_deleted`（R4） | 情报只读、跨模块引用 |
+
+另：**部分唯一索引**（folder 名、folder 内 target）与 **软删** 规则仍由 PostgreSQL 保证，配合 R9 并发场景；`IntegrityError` 仅映射唯一索引冲突（R10），**不再**依赖 `*_fkey` 约束名。
+
+#### 3.6.2 为何采用全逻辑外键
+
+| 考量 | 说明 |
+|------|------|
+| 审查对齐 | 代码与文档一致：引用完整性显式落在 Service，便于审查逐条对照 R1–R10 |
+| 写入路径 | 所有写入经 Service；create/add 前校验 user/folder/intelligence 存在且未删 |
+| 并发兜底 | 唯一索引仍防 R1/R2/R9 竞态；非唯一类 IntegrityError → `INTERNAL_DATA_CONFLICT` |
+| 历史迁移 | 001/003 曾建 FK；005 **upgrade** 统一 DROP，新环境 `001_favorite_schema.sql` 已无 `REFERENCES` |
+
+#### 3.6.3 代码与 migration 对应
+
+| 层级 | 路径 | 职责 |
+|------|------|------|
+| Migration | `005_drop_physical_foreign_keys.py` | DROP 四个物理 FK |
+| ORM | `apps/favorite/models.py` | 所有 UUID 归属列**无** `ForeignKey` |
+| Repository | `repositories/user.py` | `user_find_active_by_id` |
+| Service | `services/folder.py`、`services/item.py` | 业务规则 R1–R8；commit 前校验 |
+| 异常 | `common/integrity.py` + `exception_handlers.py` | 唯一约束 → 业务码；无 FK 分支 |
+
+#### 3.6.4 审查话术（可直接使用）
+
+> 收藏夹模块对**全部引用关系**使用逻辑外键：Service 在写入前校验 user / folder / intelligence；数据库保留部分唯一索引与软删规则作并发兜底；`IntegrityError` 经 R10 映射为稳定 API 错误码，不返回 DB 原文。物理 FK 已由 migration 005 移除，与 ORM、Service 实现一致。
+
+### 3.7 类型枚举 TargetType
 
 定义于 `apps/favorite/common/constants.py`：
 
@@ -227,7 +268,7 @@ CREATE INDEX idx_griver_favorite_item_folder
 |----|------|------|
 | intelligence | 情报 | **本期唯一使用** |
 
-### 3.7 数据库与迁移
+### 3.8 数据库与迁移
 
 | 项 | 约定 |
 |----|------|
@@ -943,6 +984,8 @@ Consumer 须单独进程运行（见 README）；Publisher 在 `ItemService.add_
 
 | 版本 | 日期 | 变更摘要 |
 |------|------|----------|
+| v3.4 | 2026-08-01 | **§3.6 全逻辑外键**：005 删物理 FK；Service + integrity.py 校验；文档与代码对齐 |
+| v3.3 | 2026-08-01 | ~~§3.6 物理 FK~~（已由 v3.4 取代） |
 | v3.2 | 2026-08-01 | §6.4.1/6.4.2 Redis 泳道图；§6.5.1/6.5.2 RabbitMQ 泳道图；§6.5.3 对照表 |
 | v3.1 | 2026-07-31 | §6.1/6.2 全量实现；§10.5 测试映射；§12 Docker 无 app 容器；§15 实现状态 |
 | v3.0 | 2026-07-29 | Redis/MQ/Docker 纳入范围；§6.1–6.2 对齐代码函数名 |

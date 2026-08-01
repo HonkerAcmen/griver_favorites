@@ -2,7 +2,7 @@
 
 > 项目：griver_favorites  
 > 路由前缀：`/grapi/v1/favorite`  
-> 设计文档：[design.md](./design.md)（v3.2）  
+> 设计文档：[design.md](./design.md)（v3.3）  
 > **版本**：v2.1（2026-07-31）  
 > **实现状态**：9 个接口均已实现；**101 passed**  
 > **本期无登录**：`user_id` 由 Body 或 Query 显式传入

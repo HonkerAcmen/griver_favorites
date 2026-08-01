@@ -7,12 +7,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.favorite.common.constants import FOLDER_NAME_MAX_LEN
+from apps.favorite.common.integrity import raise_folder_integrity_error
 from apps.favorite.exceptions import (
     FavoriteFolderNameInvalidException,
-    FavoriteFolderNameDuplicateException,
     FavoriteFolderNotFoundException,
     FavoriteUserNotFoundException,
-    FavoriteInternalDataConflict,
 )
 from apps.favorite.models import GriverFavoriteFolder, GriverFavoriteItem
 from apps.favorite.repositories.folder import (
@@ -23,6 +22,7 @@ from apps.favorite.repositories.folder import (
     favorite_item_soft_delete_by_folder_id,
     favorite_folder_soft_delete,
 )
+from apps.favorite.repositories.user import user_find_active_by_id
 from apps.favorite.schemas.folder import FavoriteFolderListQueryParams
 from apps.favorite.services.cache.folder_cache import (
     get_folder_detail_cached,
@@ -42,10 +42,17 @@ class FolderService:
         self.redis_read = redis_read
         self.redis_write = redis_write
 
+    async def _ensure_user_exists(self, user_id: uuid.UUID) -> None:
+        user = await user_find_active_by_id(self.session, user_id)
+        if user is None:
+            raise FavoriteUserNotFoundException()
+
     async def create_folder(self, user_id: uuid.UUID, name: str) -> dict:
         cleaned = name.strip()
         if not cleaned or len(cleaned) > FOLDER_NAME_MAX_LEN:
             raise FavoriteFolderNameInvalidException()
+
+        await self._ensure_user_exists(user_id)
 
         try:
             folder = await favorite_create_folder(
@@ -63,19 +70,7 @@ class FolderService:
             }
         except IntegrityError as e:
             await self.session.rollback()
-            if e.orig is None:
-                msg = str(e)
-            else:
-                msg = str(e.orig)
-
-            if "uq_griver_favorite_folder_user_name_active" in msg:
-                raise FavoriteFolderNameDuplicateException() from e
-            elif "griver_favorite_folder_user_id_fkey" in msg:
-                raise FavoriteUserNotFoundException() from e
-            elif "value too long" in msg or "character varying(100)" in msg:
-                raise FavoriteFolderNameInvalidException() from e
-            else:
-                raise FavoriteInternalDataConflict() from e
+            raise_folder_integrity_error(e)
 
     async def list_favorite_folders(
         self, params: FavoriteFolderListQueryParams
@@ -128,27 +123,16 @@ class FolderService:
             folder.updated_at = datetime.datetime.now(timezone.utc)
             new_folder = folder
         else:
-            try:
-                new_folder = await favorite_folder_update_name(
-                    session=self.session, folder=folder, new_name=clean_name
-                )
-            except IntegrityError as e:
-                await self.session.rollback()
-                if e.orig is None:
-                    msg = str(e)
-                else:
-                    msg = str(e.orig)
+            new_folder = await favorite_folder_update_name(
+                session=self.session, folder=folder, new_name=clean_name
+            )
 
-                if "uq_griver_favorite_folder_user_name_active" in msg:
-                    raise FavoriteFolderNameDuplicateException() from e
-                elif "griver_favorite_folder_user_id_fkey" in msg:
-                    raise FavoriteUserNotFoundException() from e
-                elif "value too long" in msg or "character varying(100)" in msg:
-                    raise FavoriteFolderNameInvalidException() from e
-                else:
-                    raise FavoriteInternalDataConflict() from e
+        try:
+            await self.session.commit()
+        except IntegrityError as e:
+            await self.session.rollback()
+            raise_folder_integrity_error(e)
 
-        await self.session.commit()
         if self.redis_write is not None:
             await invalidate_folder_detail(
                 self.redis_write, user_id=user_id, folder_id=folder_id
@@ -162,7 +146,7 @@ class FolderService:
             self.session, folder_id=folder_id
         )
         folder = await favorite_folder_find_by_id_and_user(
-            self.session, user_id=user_id, folder_id=folder_id
+            session=self.session, user_id=user_id, folder_id=folder_id
         )
 
         if not folder:
