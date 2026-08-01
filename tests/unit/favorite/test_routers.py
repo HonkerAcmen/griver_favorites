@@ -160,16 +160,18 @@ async def test_renamerename_favorite_folder_router():
         assert create_resp.status_code == 201
         folder_id = create_resp.json()["data"]["id"]
 
-        params = FavoriteFolderUpdateInSchema(user_id=SEED_ALICE_ID, name=folder_name)
+        payload = FavoriteFolderUpdateInSchema(user_id=SEED_ALICE_ID, name=folder_name)
         response = await ac.patch(
             f"/grapi/v1/favorite/folders/{folder_id}",
-            params=params.model_dump(mode="json"),
+            json=payload.model_dump(mode="json"),
         )
 
+        assert response.status_code == 200
         res_data = response.json()
         assert res_data["code"] == 0
         assert res_data["msg"] == "success"
         assert res_data["data"]["id"] == str(folder_id)
+        assert res_data["data"]["name"] == folder_name
         assert "created_at" in res_data["data"]
         assert "updated_at" in res_data["data"]
 

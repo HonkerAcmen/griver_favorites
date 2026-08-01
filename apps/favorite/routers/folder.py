@@ -47,7 +47,7 @@ async def get_favorite_folder_detail(
 @router.patch("/{folder_id}", status_code=status.HTTP_200_OK)
 async def renamerename_favorite_folder(
     folder_id: Annotated[uuid.UUID, Path(description="收藏夹ID")],
-    params: Annotated[FavoriteFolderUpdateInSchema, Query()],
+    params: FavoriteFolderUpdateInSchema,
     service: FolderService = Depends(get_folder_service),
 ):
     res = await service.rename_favorite_folder(

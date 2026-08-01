@@ -162,6 +162,33 @@ async def test_get_folder_detail_invalid_uuid_returns_422():
 
 
 @pytest.mark.asyncio
+async def test_patch_rename_folder_accepts_json_body():
+    """测试是否为boyd传参"""
+    new_name = f"body-rename-{uuid.uuid4()}"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        folder_id, _ = await _create_folder(client)
+
+        query_only = await client.patch(
+            f"{FOLDERS_URL}/{folder_id}",
+            params={"user_id": str(SEED_ALICE_ID), "name": new_name},
+        )
+        assert query_only.status_code == 422
+
+        response = await client.patch(
+            f"{FOLDERS_URL}/{folder_id}",
+            json={"user_id": str(SEED_ALICE_ID), "name": new_name},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 0
+    assert body["data"]["name"] == new_name
+
+
+@pytest.mark.asyncio
 async def test_patch_rename_folder_success():
     new_name = f"renamed-{uuid.uuid4()}"
 
@@ -171,7 +198,7 @@ async def test_patch_rename_folder_success():
         folder_id, _ = await _create_folder(client)
         response = await client.patch(
             f"{FOLDERS_URL}/{folder_id}",
-            params={"user_id": str(SEED_ALICE_ID), "name": new_name},
+            json={"user_id": str(SEED_ALICE_ID), "name": new_name},
         )
 
     assert response.status_code == 200
@@ -194,7 +221,7 @@ async def test_patch_rename_folder_duplicate_name():
 
         response = await client.patch(
             f"{FOLDERS_URL}/{folder_id}",
-            params={"user_id": str(SEED_ALICE_ID), "name": shared_name},
+            json={"user_id": str(SEED_ALICE_ID), "name": shared_name},
         )
 
     assert response.status_code == 200
